@@ -179,15 +179,18 @@ function createGreenhouseCover(THREE, parent) {
   }
 }
 
-function createRidgeVentilation(THREE, parent) {
+function createRidgeVentilation(THREE, parent, createLabel) {
   const halfLength = GREENHOUSE.length / 2;
   const openingWidth = 0.55;
+  const ventilationGroup = new THREE.Group();
+  ventilationGroup.name = 'ridge-ventilation';
+  parent.add(ventilationGroup);
   const darkOpening = new THREE.Mesh(
     new THREE.BoxGeometry(openingWidth, 0.025, GREENHOUSE.length),
     new THREE.MeshBasicMaterial({ color: 0x33473f })
   );
   darkOpening.position.set(0, GREENHOUSE.ridgeHeight - 0.025, 0);
-  parent.add(darkOpening);
+  ventilationGroup.add(darkOpening);
 
   const ventCover = new THREE.MeshPhysicalMaterial({
     color: 0xf1f4ea,
@@ -196,13 +199,27 @@ function createRidgeVentilation(THREE, parent) {
     side: THREE.DoubleSide,
     depthWrite: false
   });
-  addSurface(THREE, parent, [
+  const ventFlaps = [];
+  for (const side of [-1, 1]) {
+    const hinge = new THREE.Group();
+    hinge.position.set(side * openingWidth / 2, GREENHOUSE.ridgeHeight + 0.015, 0);
+    const flap = new THREE.Mesh(
+      new THREE.BoxGeometry(openingWidth / 2 + 0.04, 0.035, GREENHOUSE.length - 0.8),
+      ventCover
+    );
+    flap.position.x = -side * (openingWidth / 4 + 0.01);
+    hinge.add(flap);
+    ventilationGroup.add(hinge);
+    ventFlaps.push({ hinge, side });
+  }
+
+  addSurface(THREE, ventilationGroup, [
     [-openingWidth / 2, GREENHOUSE.ridgeHeight + 0.12, -halfLength],
     [-openingWidth / 2, GREENHOUSE.ridgeHeight, -halfLength],
     [-openingWidth / 2, GREENHOUSE.ridgeHeight, halfLength],
     [-openingWidth / 2, GREENHOUSE.ridgeHeight + 0.12, halfLength]
   ], ventCover);
-  addSurface(THREE, parent, [
+  addSurface(THREE, ventilationGroup, [
     [openingWidth / 2, GREENHOUSE.ridgeHeight, -halfLength],
     [openingWidth / 2, GREENHOUSE.ridgeHeight + 0.12, -halfLength],
     [openingWidth / 2, GREENHOUSE.ridgeHeight + 0.12, halfLength],
@@ -213,8 +230,61 @@ function createRidgeVentilation(THREE, parent) {
   for (const x of [-openingWidth / 2, openingWidth / 2]) {
     ventRails.push([[x, GREENHOUSE.ridgeHeight, -halfLength], [x, GREENHOUSE.ridgeHeight, halfLength]]);
   }
-  addInstancedBeams(THREE, parent, ventRails, 0.035,
+  addInstancedBeams(THREE, ventilationGroup, ventRails, 0.035,
     new THREE.MeshStandardMaterial({ color: 0x73817e, metalness: 0.7, roughness: 0.35 }));
+
+  const airflow = [];
+  for (const z of [-5, 0, 5]) {
+    const arrow = new THREE.Group();
+    const shaft = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.018, 0.018, 0.42, 6),
+      new THREE.MeshBasicMaterial({ color: 0x55d6d1 })
+    );
+    shaft.position.y = 0.1;
+    arrow.add(shaft);
+    const tip = new THREE.Mesh(
+      new THREE.ConeGeometry(0.07, 0.16, 6),
+      shaft.material
+    );
+    tip.rotation.x = Math.PI;
+    tip.position.y = -0.19;
+    arrow.add(tip);
+    arrow.position.set(0, GREENHOUSE.ridgeHeight + 0.65, z);
+    arrow.visible = false;
+    ventilationGroup.add(arrow);
+    airflow.push(arrow);
+  }
+
+  const closedLabel = createLabel('VENTILACIÓN · CERRADA', '#c7d5ce', 0.2);
+  closedLabel.position.set(0, GREENHOUSE.ridgeHeight + 0.45, -halfLength + 2.1);
+  ventilationGroup.add(closedLabel);
+  const openLabel = createLabel('VENTILACIÓN · ABIERTA', '#55d6d1', 0.2);
+  openLabel.position.copy(closedLabel.position);
+  openLabel.visible = false;
+  ventilationGroup.add(openLabel);
+
+  return {
+    group: ventilationGroup,
+    ventFlaps,
+    airflow,
+    closedLabel,
+    openLabel
+  };
+}
+
+function updateVentilationVisualState(ventilation, active, elapsed) {
+  ventilation.ventFlaps.forEach(({ hinge, side }) => {
+    hinge.rotation.z = active ? -side * 0.58 : 0;
+  });
+  ventilation.airflow.forEach((arrow, index) => {
+    arrow.visible = active;
+    if (active) {
+      arrow.position.y = GREENHOUSE.ridgeHeight + 0.95
+        - ((elapsed * 0.5 + index / ventilation.airflow.length) % 1) * 1.6;
+    }
+  });
+  ventilation.closedLabel.visible = !active;
+  ventilation.openLabel.visible = active;
 }
 
 function createBeds(THREE, parent, createLabel) {
@@ -294,7 +364,7 @@ function createAntechamber(THREE, parent, createLabel) {
   parent.add(label);
 }
 
-function createZoneGroups(THREE, parent) {
+function createZoneGroups(THREE, parent, createLabel) {
   const zones = {};
   const zoneLength = GREENHOUSE.length / 3;
   const colors = [0x70a98e, 0x9ba577, 0x6c9cb0];
@@ -308,11 +378,166 @@ function createZoneGroups(THREE, parent) {
     floorTint.rotation.x = -Math.PI / 2;
     floorTint.position.set(0, 0.004, startZ + zoneLength / 2);
     group.add(floorTint);
+    const label = createLabel(`ZONA ${name}`, '#c4d7cb', 0.25);
+    label.rotation.x = -Math.PI / 2;
+    label.position.set(0, 0.035, startZ + 0.9);
+    group.add(label);
     group.userData = { zone: name, startZ, endZ: startZ + zoneLength };
     zones[`zone${name}`] = group;
     parent.add(group);
   });
   return zones;
+}
+
+function createEsp32Nodes(THREE, zoneGroups, createLabel) {
+  const nodes = [];
+  const zoneNames = ['A', 'B', 'C'];
+  const zoneLength = GREENHOUSE.length / zoneNames.length;
+  const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x315e52, roughness: 0.55 });
+  const boardMaterial = new THREE.MeshStandardMaterial({ color: 0x4cb78b, roughness: 0.48 });
+  const antennaMaterial = new THREE.MeshStandardMaterial({ color: 0x252d2b, metalness: 0.35, roughness: 0.4 });
+
+  zoneNames.forEach((zoneName, index) => {
+    const zoneGroup = zoneGroups[`zone${zoneName}`];
+    const centerZ = -GREENHOUSE.length / 2 + (index + 0.5) * zoneLength;
+    const node = new THREE.Group();
+    node.name = `esp32-node-${zoneName}`;
+    node.position.set(-4.58, 1.15, centerZ);
+
+    const enclosure = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.25, 0.14), bodyMaterial);
+    node.add(enclosure);
+    const board = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.17, 0.025), boardMaterial);
+    board.position.z = 0.083;
+    node.add(board);
+    const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.22, 6), antennaMaterial);
+    antenna.position.set(0.12, 0.22, -0.025);
+    node.add(antenna);
+
+    const label = createLabel(`ESP32-${zoneName}`, '#d8f0df', 0.18);
+    label.position.set(0, 0.24, 0.16);
+    node.add(label);
+    zoneGroup.add(node);
+    nodes.push(node);
+  });
+
+  return nodes;
+}
+
+function createIoTStations(THREE, zoneGroups, createLabel) {
+  const stations = [];
+  const zoneNames = ['A', 'B', 'C'];
+  const zoneLength = GREENHOUSE.length / zoneNames.length;
+  const housingMaterial = new THREE.MeshStandardMaterial({ color: 0xd5ddd2, roughness: 0.72 });
+  const ventMaterial = new THREE.MeshStandardMaterial({ color: 0x687c72, roughness: 0.6 });
+  const sensorMaterial = new THREE.MeshStandardMaterial({ color: 0xe9bd62, metalness: 0.25, roughness: 0.45 });
+
+  zoneNames.forEach((zoneName, index) => {
+    const zoneGroup = zoneGroups[`zone${zoneName}`];
+    const centerZ = -GREENHOUSE.length / 2 + (index + 0.5) * zoneLength;
+    const station = new THREE.Group();
+    station.name = `environment-station-${zoneName}`;
+    station.position.set(4.05, 1.48, centerZ);
+
+    const shield = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.34, 10), housingMaterial);
+    station.add(shield);
+    for (const y of [-0.1, -0.02, 0.06, 0.14]) {
+      const louver = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.018, 5, 12), ventMaterial);
+      louver.position.y = y;
+      station.add(louver);
+    }
+    const lightSensor = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), sensorMaterial);
+    lightSensor.position.y = 0.24;
+    station.add(lightSensor);
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.28, 6), ventMaterial);
+    stem.position.y = -0.3;
+    station.add(stem);
+
+    const label = createLabel(`ESTACIÓN ${zoneName}`, '#e2eee6', 0.17);
+    label.position.set(0, 0.35, 0.15);
+    station.add(label);
+    zoneGroup.add(station);
+    stations.push(station);
+  });
+
+  return stations;
+}
+
+function createSoilMoistureSensors(THREE, zoneGroups, bedCenters, createLabel) {
+  const sensors = [];
+  const zoneNames = ['A', 'B', 'C'];
+  const zoneLength = GREENHOUSE.length / zoneNames.length;
+  const probeMaterial = new THREE.MeshStandardMaterial({ color: 0x465450, metalness: 0.42, roughness: 0.48 });
+  const capMaterial = new THREE.MeshStandardMaterial({ color: 0x6cae81, roughness: 0.48 });
+
+  zoneNames.forEach((zoneName, zoneIndex) => {
+    const zoneGroup = zoneGroups[`zone${zoneName}`];
+    const centerZ = -GREENHOUSE.length / 2 + (zoneIndex + 0.5) * zoneLength;
+    const firstBedIndex = zoneIndex * 2;
+    for (let bedOffset = 0; bedOffset < 2; bedOffset++) {
+      const bedIndex = firstBedIndex + bedOffset;
+      const sensor = new THREE.Group();
+      sensor.name = `soil-moisture-C${bedIndex + 1}`;
+      sensor.position.set(bedCenters[bedIndex] + 0.28, GREENHOUSE.bedHeight, centerZ);
+
+      const probe = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.032, 0.3, 7), probeMaterial);
+      probe.position.y = 0.04;
+      sensor.add(probe);
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 6), capMaterial);
+      cap.position.y = 0.2;
+      sensor.add(cap);
+      const label = createLabel(`C${bedIndex + 1}-HS`, '#d7e8ce', 0.15);
+      label.position.set(0.03, 0.34, 0.15);
+      sensor.add(label);
+
+      zoneGroup.add(sensor);
+      sensors.push(sensor);
+    }
+  });
+
+  return sensors;
+}
+
+function createPhSensor(THREE, parent, createLabel) {
+  const serviceMount = parent.getObjectByName('phProbeMount');
+  if (!serviceMount) throw new Error('Irrigation service pH mount was not found');
+
+  const sensor = new THREE.Group();
+  sensor.name = 'irrigation-water-ph-sensor';
+  sensor.position.set(0.22, 0.03, 0.12);
+  const probeMaterial = new THREE.MeshStandardMaterial({ color: 0xd8ded7, metalness: 0.58, roughness: 0.32 });
+  const probe = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.34, 8), probeMaterial);
+  probe.rotation.z = Math.PI / 2;
+  sensor.add(probe);
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.07, 10), new THREE.MeshStandardMaterial({ color: 0x5ea8a0, roughness: 0.4 }));
+  collar.rotation.z = Math.PI / 2;
+  collar.position.x = -0.08;
+  sensor.add(collar);
+  const label = createLabel('pH', '#e5f3e9', 0.18);
+  label.position.set(0.08, 0.28, 0.16);
+  sensor.add(label);
+  serviceMount.add(sensor);
+  return sensor;
+}
+
+function createIoTArchitecture(THREE, parent, zones, bedCenters, createLabel) {
+  const esp32Nodes = createEsp32Nodes(THREE, zones, createLabel);
+  const environmentalStations = createIoTStations(THREE, zones, createLabel);
+  const soilMoistureSensors = createSoilMoistureSensors(THREE, zones, bedCenters, createLabel);
+  const phSensor = createPhSensor(THREE, parent, createLabel);
+  return {
+    zones,
+    esp32Nodes,
+    environmentalStations,
+    soilMoistureSensors,
+    phSensor,
+    counts: {
+      esp32: esp32Nodes.length,
+      environmentalStations: environmentalStations.length,
+      soilMoistureSensors: soilMoistureSensors.length,
+      phSensors: 1,
+      total: esp32Nodes.length + environmentalStations.length + soilMoistureSensors.length + 1
+    }
+  };
 }
 
 function addCylinderBetween(THREE, parent, startValues, endValues, radius, material, radialSegments = 10) {
@@ -571,13 +796,14 @@ export function createGreenhouseModel(THREE, createLabel) {
   const beds = createBeds(THREE, group, createLabel);
   createGreenhouseStructure(THREE, group);
   createGreenhouseCover(THREE, group);
-  createRidgeVentilation(THREE, group);
+  const ventilation = createRidgeVentilation(THREE, group, createLabel);
   createAntechamber(THREE, group, createLabel);
-  const zones = createZoneGroups(THREE, group);
+  const zones = createZoneGroups(THREE, group, createLabel);
   const irrigationService = createIrrigationService(THREE, group, createLabel);
   const manifold = createIrrigationManifold(THREE, group, beds.centers, irrigationService, createLabel);
   const emitters = createEmitters(THREE, group, beds.centers);
   const updatePulses = createWaterPulses(THREE, group, beds.centers);
+  const iotArchitecture = createIoTArchitecture(THREE, group, zones, beds.centers, createLabel);
   const irrigation = {
     serviceGroup: irrigationService.group,
     manifoldGroup: manifold.group,
@@ -589,6 +815,9 @@ export function createGreenhouseModel(THREE, createLabel) {
       THREE, irrigationService, manifold, emitters, updatePulses, active, elapsed
     )
   };
-  group.userData = { dimensions: { ...GREENHOUSE }, bedCenters: beds.centers, irrigation, ...zones };
+  group.userData = { dimensions: { ...GREENHOUSE }, bedCenters: beds.centers, irrigation, ventilation: {
+    group: ventilation.group,
+    updateVisualState: (active, elapsed) => updateVentilationVisualState(ventilation, active, elapsed)
+  }, iotArchitecture, ...zones };
   return group;
 }
