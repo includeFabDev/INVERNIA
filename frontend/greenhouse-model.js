@@ -366,6 +366,7 @@ function createAntechamber(THREE, parent, createLabel) {
 
 function createZoneGroups(THREE, parent, createLabel) {
   const zones = {};
+  const zoneTints = {};
   const zoneLength = GREENHOUSE.length / 3;
   const colors = [0x70a98e, 0x9ba577, 0x6c9cb0];
   ['A', 'B', 'C'].forEach((name, index) => {
@@ -378,6 +379,7 @@ function createZoneGroups(THREE, parent, createLabel) {
     floorTint.rotation.x = -Math.PI / 2;
     floorTint.position.set(0, 0.004, startZ + zoneLength / 2);
     group.add(floorTint);
+    zoneTints[name] = floorTint;
     const label = createLabel(`ZONA ${name}`, '#c4d7cb', 0.25);
     label.rotation.x = -Math.PI / 2;
     label.position.set(0, 0.035, startZ + 0.9);
@@ -386,7 +388,23 @@ function createZoneGroups(THREE, parent, createLabel) {
     zones[`zone${name}`] = group;
     parent.add(group);
   });
-  return zones;
+  return {
+    ...zones,
+    setZoneHighlight(zone) {
+      for (const [name, tint] of Object.entries(zoneTints)) {
+        tint.material.opacity = zone === 'GENERAL' ? 0.055 : (name === zone ? 0.12 : 0.025);
+      }
+    }
+  };
+}
+
+function setIoTDeviceMetadata(object, metadata) {
+  const device = { source: 'simulation', ...metadata };
+  object.userData.iotDevice = device;
+  object.traverse((child) => {
+    if (child.isMesh) child.userData.iotDevice = device;
+  });
+  return object;
 }
 
 function createEsp32Nodes(THREE, zoneGroups, createLabel) {
@@ -416,6 +434,21 @@ function createEsp32Nodes(THREE, zoneGroups, createLabel) {
     const label = createLabel(`ESP32-${zoneName}`, '#d8f0df', 0.18);
     label.position.set(0, 0.24, 0.16);
     node.add(label);
+    setIoTDeviceMetadata(node, {
+      id: `esp32-${zoneName.toLowerCase()}`,
+      name: `ESP32-${zoneName}`,
+      type: 'controller',
+      zone: zoneName,
+      variable: null,
+      unit: null,
+      description: `Nodo controlador de la Zona ${zoneName}.`,
+      logicalRef: `zona-${zoneName.toLowerCase()}`,
+      associatedDeviceIds: [
+        `station-${zoneName.toLowerCase()}`,
+        `soil-${firstSoilId(zoneName)}`,
+        `soil-${firstSoilId(zoneName) + 1}`
+      ]
+    });
     zoneGroup.add(node);
     nodes.push(node);
   });
@@ -455,6 +488,16 @@ function createIoTStations(THREE, zoneGroups, createLabel) {
     const label = createLabel(`ESTACIÓN ${zoneName}`, '#e2eee6', 0.17);
     label.position.set(0, 0.35, 0.15);
     station.add(label);
+    setIoTDeviceMetadata(station, {
+      id: `station-${zoneName.toLowerCase()}`,
+      name: `Estación ambiental ${zoneName}`,
+      type: 'environmental_station',
+      zone: zoneName,
+      variable: ['temperatura_c', 'humedad_pct', 'iluminancia_lux', 'co2_ppm'],
+      unit: { temperatura_c: '°C', humedad_pct: '%', iluminancia_lux: 'lux', co2_ppm: 'ppm' },
+      description: `Representa las variables ambientales agregadas de la Zona ${zoneName}.`,
+      logicalRef: `zona-${zoneName.toLowerCase()}`
+    });
     zoneGroup.add(station);
     stations.push(station);
   });
@@ -489,6 +532,18 @@ function createSoilMoistureSensors(THREE, zoneGroups, bedCenters, createLabel) {
       label.position.set(0.03, 0.34, 0.15);
       sensor.add(label);
 
+      setIoTDeviceMetadata(sensor, {
+        id: `soil-${bedIndex + 1}`,
+        name: `Sensor de humedad de suelo ${bedIndex + 1}`,
+        type: 'soil_moisture_sensor',
+        zone: zoneName,
+        variable: 'humedad_suelo_pct',
+        unit: '%',
+        description: `Valor simulado agregado de la Zona ${zoneName}; no es una lectura física individual.`,
+        logicalRef: `camellon-C${bedIndex + 1}`,
+        camellon: `C${bedIndex + 1}`
+      });
+
       zoneGroup.add(sensor);
       sensors.push(sensor);
     }
@@ -515,6 +570,16 @@ function createPhSensor(THREE, parent, createLabel) {
   const label = createLabel('pH', '#e5f3e9', 0.18);
   label.position.set(0.08, 0.28, 0.16);
   sensor.add(label);
+  setIoTDeviceMetadata(sensor, {
+    id: 'ph-1',
+    name: 'Sensor de pH de riego',
+    type: 'ph_sensor',
+    zone: 'GENERAL',
+    variable: 'ph',
+    unit: 'pH',
+    description: 'pH simulado del agua o solución de riego en el punto de servicio.',
+    logicalRef: 'agua-solucion-riego'
+  });
   serviceMount.add(sensor);
   return sensor;
 }
@@ -524,12 +589,24 @@ function createIoTArchitecture(THREE, parent, zones, bedCenters, createLabel) {
   const environmentalStations = createIoTStations(THREE, zones, createLabel);
   const soilMoistureSensors = createSoilMoistureSensors(THREE, zones, bedCenters, createLabel);
   const phSensor = createPhSensor(THREE, parent, createLabel);
+  const selectableDevices = [
+    ...esp32Nodes,
+    ...environmentalStations,
+    ...soilMoistureSensors,
+    phSensor
+  ];
   return {
     zones,
     esp32Nodes,
     environmentalStations,
     soilMoistureSensors,
     phSensor,
+    selectableDevices,
+    summaryByZone: {
+      A: selectableDevices.filter((device) => device.userData.iotDevice.zone === 'A'),
+      B: selectableDevices.filter((device) => device.userData.iotDevice.zone === 'B'),
+      C: selectableDevices.filter((device) => device.userData.iotDevice.zone === 'C')
+    },
     counts: {
       esp32: esp32Nodes.length,
       environmentalStations: environmentalStations.length,
@@ -820,4 +897,8 @@ export function createGreenhouseModel(THREE, createLabel) {
     updateVisualState: (active, elapsed) => updateVentilationVisualState(ventilation, active, elapsed)
   }, iotArchitecture, ...zones };
   return group;
+}
+
+function firstSoilId(zoneName) {
+  return (['A', 'B', 'C'].indexOf(zoneName) * 2) + 1;
 }
