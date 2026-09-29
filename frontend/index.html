@@ -709,6 +709,7 @@
         import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
         import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        import { createGreenhouseModel } from '/frontend/greenhouse-model.js';
 
         /* ==============================
            DATOS DE CADA CAPA
@@ -784,8 +785,8 @@
            CONFIGURACIÓN DE CÁMARA POR CAPA
         ============================== */
         const cameraViews = {
-            overview: { pos: [26, 13, 26], target: [0, 11, 0] },
-            physical: { pos: [13, 2.5, 13], target: [0, 1.8, 0] },
+            overview: { pos: [24, 19, 35], target: [0, 7, 0] },
+            physical: { pos: [21, 16, 29], target: [0, 1.8, 0] },
             connectivity: { pos: [12, 8.5, 12], target: [0, 8, 0] },
             platform: { pos: [14, 15, 14], target: [0, 14.5, 0] },
             application: { pos: [12, 21.5, 12], target: [0, 21, 0] },
@@ -799,8 +800,8 @@
         scene.background = new THREE.Color(0x070b07);
         scene.fog = new THREE.FogExp2(0x070b07, 0.012);
 
-        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
-        camera.position.set(26, 13, 26);
+        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 400);
+        camera.position.set(...cameraViews.overview.pos);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -811,11 +812,12 @@
 
         /* Controles orbitales */
         const controls = new OrbitControls(camera, renderer.domElement);
-        controls.target.set(0, 11, 0);
+        controls.target.set(...cameraViews.overview.target);
         controls.enableDamping = true;
         controls.dampingFactor = 0.06;
-        controls.maxDistance = 60;
-        controls.minDistance = 5;
+        controls.maxDistance = 90;
+        controls.minDistance = 1.5;
+        controls.maxPolarAngle = Math.PI / 2.02;
         controls.update();
 
         /* Post-procesado: Bloom */
@@ -830,11 +832,14 @@
         /* ==============================
            ILUMINACIÓN
         ============================== */
-        const ambientLight = new THREE.AmbientLight(0x1a2a1a, 0.8);
+        const ambientLight = new THREE.AmbientLight(0xdfe8dd, 1.1);
         scene.add(ambientLight);
 
-        const dirLight = new THREE.DirectionalLight(0xd4e8d0, 0.6);
-        dirLight.position.set(10, 25, 8);
+        const hemisphereLight = new THREE.HemisphereLight(0xeaf2ff, 0x5e674f, 0.75);
+        scene.add(hemisphereLight);
+
+        const dirLight = new THREE.DirectionalLight(0xfff4dc, 1.2);
+        dirLight.position.set(-12, 28, 16);
         scene.add(dirLight);
 
         /* Luces puntuales para cada capa */
@@ -1256,8 +1261,14 @@
         labelPhysical.position.set(0, 5.8, 0);
         physicalGroup.add(labelPhysical);
 
+        physicalGroup.clear();
+        thermometer = null;
+        humidityBar = null;
+        humidityText = null;
+        riegoIndicator = null;
+        const greenhouseModel = createGreenhouseModel(THREE, createLabel);
+        physicalGroup.add(greenhouseModel);
         scene.add(physicalGroup);
-        scene.add(createPlatform(0, 0x2ecc71));
 
         /* ==============================
            CAPA CONECTIVIDAD — WI-FI
