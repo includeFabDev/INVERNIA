@@ -13,6 +13,14 @@ export function actionRoute(supabase) {
         return res.status(400).json({ error: 'Missing chatId' });
       }
 
+      if (device === 'automation' && (mode === 'manual' || mode === 'automatic')) {
+        const current = await ensureDeviceState(supabase, chatId);
+        const nextState = { ...(current.state || {}) };
+        nextState.modoAutomatico = mode === 'automatic';
+        await saveDeviceState(supabase, chatId, nextState, `set_mode_${mode}`);
+        return res.json({ ok: true, modoAutomatico: nextState.modoAutomatico });
+      }
+
       // Control explícito del reloj (usarHoraReal / timeScale)
       // Contrato (simple y extensible):
       // 1) device='time', mode='backend'|'sim' => set usarHoraReal

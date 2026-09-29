@@ -1,9 +1,17 @@
+import { createZoneMeasurements } from './zones.js';
+
 const DEFAULT_STATE = {
   luz: false,
   aire: false,
   riego: false,
   temperatura_c: 27,
   humedad_pct: 68,
+  humedad_suelo_pct: 58,
+  iluminancia_lux: 0,
+  co2_ppm: 650,
+  ph: 6.2,
+  modoCalor: false,
+  modoSeco: false,
   modoAutomatico: true,
 
   // Reloj
@@ -15,7 +23,9 @@ const DEFAULT_STATE = {
 };
 
 export function getDefaultState() {
-  return { ...DEFAULT_STATE };
+  const state = { ...DEFAULT_STATE };
+  state.zonas = createZoneMeasurements(state);
+  return state;
 }
 
 export async function ensureDeviceState(supabase, chatId) {

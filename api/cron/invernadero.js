@@ -1,5 +1,10 @@
 import { getSupabaseClient } from '../../backend_vercel/src/services/supabaseClient.js';
-import { ensureDeviceState, saveDeviceState } from '../../backend_vercel/src/services/deviceStates.js';
+import { ensureDeviceState, getDefaultState, saveDeviceState } from '../../backend_vercel/src/services/deviceStates.js';
+import { averageZoneMeasurements, createZoneMeasurements } from '../../backend_vercel/src/services/zones.js';
+
+const MEASUREMENT_INTERVAL_MS = 60_000;
+let measurementsTableUnavailable = false;
+let lastMeasurementsWarningAt = 0;
 
 function parseHHMM(hhmm) {
   if (!hhmm || typeof hhmm !== 'string') return { hh: 0, mm: 0 };
@@ -15,10 +20,53 @@ function toHHMM(hh, mm) {
 }
 
 function minutesToHHMM(totalMinutes) {
-  const m = ((totalMinutes % (24 * 60)) + 24 * 60) % (24 * 60);
+  const wholeMinutes = Math.floor(totalMinutes);
+  const m = ((wholeMinutes % (24 * 60)) + 24 * 60) % (24 * 60);
   const hh = Math.floor(m / 60);
   const mm = m % 60;
   return toHHMM(hh, mm);
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+async function persistZoneMeasurements(supabase, state) {
+  if (measurementsTableUnavailable) return;
+
+  const now = Date.now();
+  if (now - (state.__lastMeasurementMs || 0) < MEASUREMENT_INTERVAL_MS) return;
+
+  const createdAt = new Date(now).toISOString();
+  const rows = Object.entries(state.zonas || {}).map(([zone, values]) => ({
+    created_at: createdAt,
+    zone,
+    temperatura_c: values.temperatura_c,
+    humedad_pct: values.humedad_pct,
+    humedad_suelo_pct: values.humedad_suelo_pct,
+    iluminancia_lux: values.iluminancia_lux,
+    co2_ppm: values.co2_ppm,
+    ph: values.ph
+  }));
+
+  const { error } = await supabase.from('measurements').insert(rows);
+  if (error) {
+    const missingTable = error.code === '42P01' || error.code === 'PGRST205';
+    if (missingTable) measurementsTableUnavailable = true;
+    if (missingTable || now - lastMeasurementsWarningAt >= MEASUREMENT_INTERVAL_MS) {
+      console.warn('[cron/invernadero] measurements snapshot unavailable', error.code || 'unknown');
+      lastMeasurementsWarningAt = now;
+    }
+    return;
+  }
+
+  state.__lastMeasurementMs = now;
+}
+
+function updateZonesAndAverages(state, previousZones, dtSeconds, timeScale) {
+  const alpha = 1 - Math.exp(-Math.min(120, dtSeconds * timeScale) / 30);
+  state.zonas = createZoneMeasurements(state, previousZones, alpha);
+  Object.assign(state, averageZoneMeasurements(state.zonas));
 }
 
 // Regla simple de clima (1 tick = 1 minuto virtual)
@@ -45,6 +93,8 @@ function applyClimateRules(currentState, actuators, dtSeconds, timeScale) {
   const luz = !!actuators.luz;
   const aire = !!actuators.aire;
   const riego = !!actuators.riego;
+  const modoCalor = !!state.modoCalor;
+  const modoSeco = !!state.modoSeco;
 
   const horaVirtual = typeof state.horaVirtual === 'string' ? state.horaVirtual : '12:00';
   const solarFactor = computeSolarFactorFromHora(horaVirtual);
@@ -57,6 +107,7 @@ function applyClimateRules(currentState, actuators, dtSeconds, timeScale) {
   // 2) Correcciones por actuadores
   if (aire) tempTarget -= 2.5;
   if (luz) tempTarget += 0.5;
+  if (modoCalor) tempTarget += 4;
 
   // 3) Humedad base por hora (inversa del sol)
   const HUM_MAX = 85;
@@ -65,6 +116,8 @@ function applyClimateRules(currentState, actuators, dtSeconds, timeScale) {
 
   if (riego) humTarget += 8;
   if (aire) humTarget -= 1.5;
+  if (modoCalor) humTarget -= 3;
+  if (modoSeco) humTarget -= 12;
 
   // 4) Acercamiento incremental al target, escalado por dtSeconds + timeScale
   //    para que el cambio sea proporcional al tiempo real pasado, no constante
@@ -112,6 +165,33 @@ function applyClimateRules(currentState, actuators, dtSeconds, timeScale) {
   // LÍMITES LÓGICOS (Clamp) para que no rompa la escala del invernadero
   state.temperatura_c = Math.max(14, Math.min(45, temp));
   state.humedad_pct = Math.max(20, Math.min(95, hum));
+
+  const virtualMinutes = Math.min(30, dtSeconds * timeScale);
+  const soil = typeof state.humedad_suelo_pct === 'number' ? state.humedad_suelo_pct : 58;
+  const soilRate = riego ? 0.035 : -0.008 * (modoSeco ? 2 : 1);
+  state.humedad_suelo_pct = clamp(soil + soilRate * virtualMinutes, 0, 100);
+
+  const previousLux = typeof state.iluminancia_lux === 'number' ? state.iluminancia_lux : 0;
+  const targetLux = 55000 * solarFactor;
+  const luxAlpha = 1 - Math.exp(-virtualMinutes / 8);
+  state.iluminancia_lux = clamp(previousLux + (targetLux - previousLux) * luxAlpha, 0, 60000);
+
+  const previousCo2 = typeof state.co2_ppm === 'number' ? state.co2_ppm : 650;
+  const targetCo2 = aire ? 420 : 800 + solarFactor * 120;
+  const co2Alpha = 1 - Math.exp(-virtualMinutes / (aire ? 5 : 90));
+  state.co2_ppm = clamp(previousCo2 + (targetCo2 - previousCo2) * co2Alpha, 350, 2000);
+
+  const previousPh = typeof state.ph === 'number' ? state.ph : 6.2;
+  const targetPh = riego ? 6.15 : 6.25;
+  const phAlpha = 1 - Math.exp(-virtualMinutes / 360);
+  state.ph = clamp(previousPh + (targetPh - previousPh) * phAlpha, 5.5, 7.5);
+
+  if (state.modoAutomatico !== false) {
+    if (state.temperatura_c >= 30) state.aire = true;
+    if (state.temperatura_c <= 27) state.aire = false;
+    if (state.humedad_suelo_pct <= 35) state.riego = true;
+    if (state.humedad_suelo_pct >= 60) state.riego = false;
+  }
 
   return state;
 }
@@ -168,7 +248,13 @@ export default async function handler(req, res) {
     }
 
     const chatId = row.chat_id;
-    const state = { ...persistedState };
+    const state = { ...getDefaultState(), ...persistedState };
+    const defaultZones = getDefaultState().zonas;
+    const previousZones = Object.fromEntries(['A', 'B', 'C'].map((zone) => [
+      zone,
+      { ...defaultZones[zone], ...(persistedState.zonas?.[zone] || {}) }
+    ]));
+    state.zonas = createZoneMeasurements(state, previousZones, 1);
 
     // Hora virtual (fuente de verdad = cron)
     // Retrocompatibilidad:
@@ -200,36 +286,28 @@ export default async function handler(req, res) {
       riego: !!state.riego
     };
 
-    // Si modoAutomatico está activo, aplicar reglas de clima
+    // El clima sigue evolucionando en manual; solo se omiten umbrales automáticos.
     const modoAutomatico = state.modoAutomatico !== false;
-    if (modoAutomatico) {
-      const nextState = applyClimateRules(state, actuators, dtSeconds, timeScale);
-      // Asegurar que el reloj no se pierda tras aplicar reglas
-      if (typeof state.horaVirtual === 'string') nextState.horaVirtual = state.horaVirtual;
-      // Guardar la marca temporal del último tick del cron DENTRO del state
-      // para que el próximo tick pueda calcular su dt real sin confundirse
-      // con los writes de /api/state.
-      nextState.__lastCronMs = Date.now();
+    const nextState = applyClimateRules(state, actuators, dtSeconds, timeScale);
+    updateZonesAndAverages(nextState, previousZones, dtSeconds, timeScale);
+    if (typeof state.horaVirtual === 'string') nextState.horaVirtual = state.horaVirtual;
+    nextState.__lastCronMs = Date.now();
 
-      await saveDeviceState(supabase, chatId, nextState, 'tick_clima');
-      return res.status(200).json({
-        ok: true,
-        updated: 1,
-        dtSeconds: Math.round(dtSeconds * 10) / 10,
-        timeScale,
-        temperatura_c: nextState.temperatura_c,
-        humedad_pct: nextState.humedad_pct
-      });
-    }
-
-    // Modo manual: solo reloj, mantenemos temp/hum tal cual.
-    state.__lastCronMs = Date.now();
-    await saveDeviceState(supabase, chatId, state, 'tick_reloj');
+    await persistZoneMeasurements(supabase, nextState);
+    await saveDeviceState(supabase, chatId, nextState, modoAutomatico ? 'tick_clima' : 'tick_manual');
     return res.status(200).json({
       ok: true,
       updated: 1,
       dtSeconds: Math.round(dtSeconds * 10) / 10,
-      mode: 'manual'
+      timeScale,
+      mode: modoAutomatico ? 'automatic' : 'manual',
+      temperatura_c: nextState.temperatura_c,
+      humedad_pct: nextState.humedad_pct,
+      humedad_suelo_pct: nextState.humedad_suelo_pct,
+      iluminancia_lux: nextState.iluminancia_lux,
+      co2_ppm: nextState.co2_ppm,
+      ph: nextState.ph,
+      zonas: nextState.zonas
     });
   } catch (err) {
     console.error('[cron/invernadero] error:', err);

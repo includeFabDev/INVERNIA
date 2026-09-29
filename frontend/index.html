@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <style>
         :root {
             --physical: #2ecc71;
@@ -166,6 +167,228 @@
             flex-shrink: 0;
         }
 
+        .monitor-panel {
+            position: fixed;
+            top: 68px;
+            left: 20px;
+            width: min(390px, calc(100vw - 40px));
+            z-index: 10;
+            padding: 14px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: rgba(12, 20, 12, 0.82);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            max-height: calc(100vh - 110px);
+            overflow-y: auto;
+        }
+
+        .monitor-heading {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .monitor-heading h2 {
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .monitor-heading span {
+            color: var(--muted);
+            font-size: 10px;
+        }
+
+        .sensor-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .sensor-card {
+            min-width: 0;
+            padding: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.035);
+        }
+
+        .sensor-name {
+            color: var(--muted);
+            font-size: 9px;
+            font-weight: 700;
+            line-height: 1.3;
+        }
+
+        .sensor-reading {
+            display: flex;
+            align-items: baseline;
+            gap: 4px;
+            margin-top: 5px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .sensor-value {
+            overflow: hidden;
+            font-size: 20px;
+            font-weight: 600;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .sensor-unit {
+            color: var(--muted);
+            font-size: 10px;
+        }
+
+        .zone-selector,
+        .mode-selector {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 4px;
+            margin-bottom: 10px;
+            padding: 3px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .mode-selector {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            margin: 0;
+        }
+
+        .zone-button,
+        .mode-button {
+            min-width: 0;
+            padding: 7px 4px;
+            border: 0;
+            border-radius: 6px;
+            background: transparent;
+            color: var(--muted);
+            font: 600 10px 'Space Grotesk', sans-serif;
+            cursor: pointer;
+        }
+
+        .zone-button.active,
+        .mode-button.active {
+            background: rgba(46, 204, 113, 0.18);
+            color: #baf4ce;
+        }
+
+        .dashboard-section {
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border);
+        }
+
+        .section-label {
+            margin-bottom: 7px;
+            color: var(--muted);
+            font-size: 9px;
+            font-weight: 700;
+        }
+
+        .mode-row,
+        .actuator-row,
+        .history-heading {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .mode-state {
+            color: #baf4ce;
+            font-size: 10px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .actuator-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 9px;
+        }
+
+        .actuator-card {
+            min-width: 0;
+            padding: 9px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.035);
+        }
+
+        .actuator-title {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 10px;
+            font-weight: 700;
+        }
+
+        .actuator-indicator {
+            width: 7px;
+            height: 7px;
+            flex: 0 0 7px;
+            border-radius: 50%;
+            background: #667066;
+        }
+
+        .actuator-indicator.on {
+            background: #2ecc71;
+            box-shadow: 0 0 7px rgba(46, 204, 113, 0.75);
+        }
+
+        .actuator-action {
+            width: 100%;
+            margin-top: 7px;
+            padding: 6px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--fg);
+            font: 600 10px 'Space Grotesk', sans-serif;
+            cursor: pointer;
+        }
+
+        .actuator-action:disabled {
+            cursor: not-allowed;
+            opacity: 0.45;
+        }
+
+        .rules-copy {
+            color: #b0c0b0;
+            font-size: 10px;
+            line-height: 1.6;
+        }
+
+        .history-heading select {
+            max-width: 58%;
+            padding: 6px 8px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: #101810;
+            color: var(--fg);
+            font: 10px 'Space Grotesk', sans-serif;
+        }
+
+        .history-chart-wrap {
+            position: relative;
+            height: 150px;
+            margin-top: 8px;
+        }
+
+        .history-message {
+            min-height: 14px;
+            margin-top: 4px;
+            color: var(--muted);
+            font-size: 9px;
+        }
+
         /* Navigation */
         .nav-bar {
             position: fixed;
@@ -266,6 +489,31 @@
 
         /* Responsive */
         @media (max-width: 768px) {
+            .monitor-panel {
+                top: 58px;
+                left: 10px;
+                width: min(350px, calc(100vw - 20px));
+                padding: 10px;
+                max-height: calc(100vh - 220px);
+            }
+
+            .sensor-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 6px;
+            }
+
+            .sensor-card {
+                padding: 8px 6px;
+            }
+
+            .sensor-value {
+                font-size: 17px;
+            }
+
+            .sensor-unit {
+                font-size: 9px;
+            }
+
             .info-panel {
                 width: calc(100% - 32px);
                 right: 16px;
@@ -276,12 +524,30 @@
             }
 
             .nav-btn {
-                padding: 8px 10px;
-                font-size: 10px;
+                flex: 1;
+                min-width: 0;
+                padding: 7px 4px;
+                font-size: 9px;
             }
 
             .nav-btn i {
-                font-size: 14px;
+                font-size: 12px;
+            }
+
+            .nav-bar {
+                width: calc(100vw - 16px);
+                justify-content: space-between;
+                gap: 2px;
+            }
+
+            .sim-controls {
+                right: 10px;
+                bottom: 94px !important;
+                left: 10px;
+                max-width: calc(100vw - 20px);
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 6px;
             }
         }
 
@@ -337,6 +603,68 @@
         <p id="layerDesc">Descripción</p>
         <ul class="elements-list" id="layerElements"></ul>
     </aside>
+
+    <section class="monitor-panel" aria-label="Monitoreo INVERNIA">
+        <div class="monitor-heading">
+            <h2>INVERNIA · MONITOREO</h2>
+            <span id="monitorSource">Conectando</span>
+        </div>
+        <div class="zone-selector" role="group" aria-label="Sector de muestreo">
+            <button class="zone-button active" type="button" data-zone="GENERAL" aria-pressed="true">GENERAL</button>
+            <button class="zone-button" type="button" data-zone="A" aria-pressed="false">ZONA A</button>
+            <button class="zone-button" type="button" data-zone="B" aria-pressed="false">ZONA B</button>
+            <button class="zone-button" type="button" data-zone="C" aria-pressed="false">ZONA C</button>
+        </div>
+        <div class="sensor-grid">
+            <article class="sensor-card"><div class="sensor-name">TEMPERATURA</div><div class="sensor-reading"><span class="sensor-value" id="sensorTemp">27.0</span><span class="sensor-unit">°C</span></div></article>
+            <article class="sensor-card"><div class="sensor-name">HUMEDAD RELATIVA</div><div class="sensor-reading"><span class="sensor-value" id="sensorHumidity">68.0</span><span class="sensor-unit">%</span></div></article>
+            <article class="sensor-card"><div class="sensor-name">HUMEDAD DEL SUELO</div><div class="sensor-reading"><span class="sensor-value" id="sensorSoil">58.0</span><span class="sensor-unit">%</span></div></article>
+            <article class="sensor-card"><div class="sensor-name">ILUMINANCIA</div><div class="sensor-reading"><span class="sensor-value" id="sensorLux">0</span><span class="sensor-unit">lux</span></div></article>
+            <article class="sensor-card"><div class="sensor-name">CO2</div><div class="sensor-reading"><span class="sensor-value" id="sensorCo2">650</span><span class="sensor-unit">ppm</span></div></article>
+            <article class="sensor-card"><div class="sensor-name">PH</div><div class="sensor-reading"><span class="sensor-value" id="sensorPh">6.20</span><span class="sensor-unit">pH</span></div></article>
+        </div>
+        <section class="dashboard-section" aria-label="Modo y actuadores">
+            <div class="mode-row">
+                <div>
+                    <div class="section-label">MODO DE CONTROL</div>
+                    <div class="mode-state" id="modeState">AUTOMÁTICO</div>
+                </div>
+                <div class="mode-selector" role="group" aria-label="Modo de control">
+                    <button class="mode-button" id="modeManual" type="button" data-mode="manual" aria-pressed="false">MANUAL</button>
+                    <button class="mode-button active" id="modeAutomatic" type="button" data-mode="automatic" aria-pressed="true">AUTOMÁTICO</button>
+                </div>
+            </div>
+            <div class="actuator-grid">
+                <div class="actuator-card">
+                    <div class="actuator-title"><span class="actuator-indicator" id="irrigationIndicator"></span>RIEGO <span id="irrigationState">OFF</span></div>
+                    <button class="actuator-action" id="irrigationAction" type="button" disabled>Control automático</button>
+                </div>
+                <div class="actuator-card">
+                    <div class="actuator-title"><span class="actuator-indicator" id="ventilationIndicator"></span>VENTILACIÓN <span id="ventilationState">OFF</span></div>
+                    <button class="actuator-action" id="ventilationAction" type="button" disabled>Control automático</button>
+                </div>
+            </div>
+        </section>
+        <section class="dashboard-section" aria-label="Reglas automáticas">
+            <div class="section-label">REGLAS AUTOMÁTICAS</div>
+            <div class="rules-copy">Temperatura ≥ 30 °C → ventilación ON<br>Temperatura ≤ 27 °C → ventilación OFF<br>Suelo ≤ 35 % → riego ON<br>Suelo ≥ 60 % → riego OFF</div>
+        </section>
+        <section class="dashboard-section" aria-label="Historial temporal">
+            <div class="history-heading">
+                <div class="section-label">HISTORIAL</div>
+                <select id="historyVariable" aria-label="Variable del historial">
+                    <option value="temperatura_c">Temperatura</option>
+                    <option value="humedad_pct">Humedad relativa</option>
+                    <option value="humedad_suelo_pct">Humedad del suelo</option>
+                    <option value="iluminancia_lux">Iluminancia</option>
+                    <option value="co2_ppm">CO2</option>
+                    <option value="ph">pH</option>
+                </select>
+            </div>
+            <div class="history-chart-wrap"><canvas id="historyChart" aria-label="Gráfica histórica"></canvas></div>
+            <p class="history-message" id="historyMessage" aria-live="polite">Preparando historial...</p>
+        </section>
+    </section>
 
     <!-- Navegación -->
     <nav class="nav-bar" id="navBar">
@@ -1349,7 +1677,15 @@
            CONEXIÓN BACKEND (FASE 2)
         ============================== */
         const CHAT_ID = 123456789; // chat.id real de Telegram
-        let backendDevices = { luz: false, aire: false };
+        const API_BASE_URL = 'https://proyecto-iot-mocha.vercel.app';
+        let selectedZone = 'GENERAL';
+        let backendDevices = {
+            luz: false, aire: false, riego: false,
+            temperatura_c: 27, humedad_pct: 68, humedad_suelo_pct: 58,
+            iluminancia_lux: 0, co2_ppm: 650, ph: 6.2, zonas: {},
+            modoAutomatico: true, modoCalor: false, modoSeco: false,
+            horaVirtual: '18:45', timeScale: 1
+        };
 
         // Debug HUD (para demo): muestra el estado que está leyendo el frontend
         const debugHud = document.createElement('div');
@@ -1388,6 +1724,74 @@
             const h = typeof d.humedad_pct === 'number' ? `${d.humedad_pct.toFixed(0)}%` : '--';
             const riego = d.riego ? 'ON' : 'OFF';
             debugHud.textContent = `HUD | Luz:${d.luz ? 'ON' : 'OFF'} Aire:${d.aire ? 'ON' : 'OFF'} Temp:${t} Hum:${h} Riego:${riego} Vel:x${d.timeScale || 1}`;
+            renderSensorCards();
+        }
+
+        const zoneProfiles = {
+            A: { temperatura_c: 0.6, humedad_pct: -1, humedad_suelo_pct: -2, iluminancia_lux: 1.03, co2_ppm: 20 },
+            B: { temperatura_c: 0, humedad_pct: 0, humedad_suelo_pct: 0, iluminancia_lux: 1, co2_ppm: 0 },
+            C: { temperatura_c: -0.6, humedad_pct: 1, humedad_suelo_pct: 2, iluminancia_lux: 0.97, co2_ppm: -20 }
+        };
+
+        function measurementsForZone(zone) {
+            if (zone === 'GENERAL') return backendDevices;
+            if (simModeSelect.value !== 'sim' && backendDevices.zonas?.[zone]) {
+                return { ...backendDevices, ...backendDevices.zonas[zone] };
+            }
+
+            const profile = zoneProfiles[zone];
+            return {
+                ...backendDevices,
+                temperatura_c: clamp(backendDevices.temperatura_c + profile.temperatura_c, 14, 45),
+                humedad_pct: clamp(backendDevices.humedad_pct + profile.humedad_pct, 20, 95),
+                humedad_suelo_pct: clamp(backendDevices.humedad_suelo_pct + profile.humedad_suelo_pct, 0, 100),
+                iluminancia_lux: clamp(backendDevices.iluminancia_lux * profile.iluminancia_lux, 0, 60000),
+                co2_ppm: clamp(backendDevices.co2_ppm + profile.co2_ppm, 350, 2000)
+            };
+        }
+
+        function renderSensorCards() {
+            const displayed = measurementsForZone(selectedZone);
+            const values = {
+                sensorTemp: [displayed.temperatura_c, 1],
+                sensorHumidity: [displayed.humedad_pct, 1],
+                sensorSoil: [displayed.humedad_suelo_pct, 1],
+                sensorLux: [displayed.iluminancia_lux, 0],
+                sensorCo2: [displayed.co2_ppm, 0],
+                sensorPh: [displayed.ph, 2]
+            };
+            for (const [id, [value, digits]] of Object.entries(values)) {
+                const element = document.getElementById(id);
+                if (element && typeof value === 'number' && Number.isFinite(value)) {
+                    element.textContent = value.toFixed(digits);
+                }
+            }
+            const source = document.getElementById('monitorSource');
+            if (source) source.textContent = simModeSelect.value === 'sim' ? 'Simulación local' : 'Backend';
+            renderDashboardControls();
+        }
+
+        function renderDashboardControls() {
+            const local = simModeSelect.value === 'sim';
+            const automatic = local ? sim.modoAutomatico : backendDevices.modoAutomatico !== false;
+            const irrigationOn = local ? sim.riego : !!backendDevices.riego;
+            const ventilationOn = local ? sim.aire : !!backendDevices.aire;
+            document.getElementById('modeState').textContent = automatic ? 'AUTOMÁTICO' : 'MANUAL';
+            document.getElementById('modeManual').classList.toggle('active', !automatic);
+            document.getElementById('modeAutomatic').classList.toggle('active', automatic);
+            document.getElementById('modeManual').setAttribute('aria-pressed', String(!automatic));
+            document.getElementById('modeAutomatic').setAttribute('aria-pressed', String(automatic));
+            document.getElementById('irrigationState').textContent = irrigationOn ? 'ON' : 'OFF';
+            document.getElementById('ventilationState').textContent = ventilationOn ? 'ON' : 'OFF';
+            document.getElementById('irrigationIndicator').classList.toggle('on', irrigationOn);
+            document.getElementById('ventilationIndicator').classList.toggle('on', ventilationOn);
+            for (const id of ['irrigationAction', 'ventilationAction']) {
+                const button = document.getElementById(id);
+                button.disabled = automatic;
+                button.textContent = automatic ? 'Control automático' : (id === 'irrigationAction'
+                    ? (irrigationOn ? 'Apagar riego' : 'Encender riego')
+                    : (ventilationOn ? 'Apagar ventilación' : 'Encender ventilación'));
+            }
         }
 
 
@@ -1395,6 +1799,7 @@
         // Controles de simulación de clima (tiempo real / acelerado)
         // ==============================
         const simControls = document.createElement('div');
+        simControls.className = 'sim-controls';
         simControls.style.position = 'fixed';
         simControls.style.left = '20px';
         simControls.style.bottom = '140px';
@@ -1467,7 +1872,15 @@
             lastRealMs: Date.now(),
             temp_c: 27,
             hum_pct: 68,
+            soil_pct: 58,
+            lux: 0,
+            co2_ppm: 650,
+            ph: 6.2,
+            aire: false,
             riego: false,
+            modoAutomatico: true,
+            modoCalor: false,
+            modoSeco: false,
             // configuración simple (se puede ajustar)
             tempMin: 14,
             tempMax: 38,
@@ -1481,7 +1894,8 @@
         function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
 
         function minutesToHHMM(mins) {
-            const m = ((mins % (24 * 60)) + (24 * 60)) % (24 * 60);
+            const wholeMinutes = Math.floor(mins);
+            const m = ((wholeMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
             const hh = String(Math.floor(m / 60)).padStart(2, '0');
             const mm = String(m % 60).padStart(2, '0');
             return `${hh}:${mm}`;
@@ -1534,29 +1948,244 @@
                 if (!v) return 1; // real time
                 return v;
             })();
+            const virtualMinutes = dtSeconds * speedFactor;
 
             sim.minutesOfDay += (dtSeconds * 60) * speedFactor; // 1s real => 1 min simulada * speed
 
             const f = solarFactor(sim.minutesOfDay); // 0..1
 
             // TEMP sube con el sol
-            const targetTemp = sim.tempMin + (sim.tempMax - sim.tempMin) * f;
+            const targetTemp = clamp(
+                sim.tempMin + (sim.tempMax - sim.tempMin) * f + (sim.modoCalor ? 4 : 0) - (sim.aire ? 2.5 : 0),
+                sim.tempMin,
+                45
+            );
             // HUM es inversa (cuando más calor/sol, menos humedad)
-            const targetHum = sim.humMax - (sim.humMax - sim.humMin) * f;
+            const targetHum = clamp(
+                sim.humMax - (sim.humMax - sim.humMin) * f + (sim.riego ? 8 : 0) - (sim.aire ? 1.5 : 0)
+                    - (sim.modoCalor ? 3 : 0) - (sim.modoSeco ? 12 : 0),
+                20,
+                95
+            );
 
             // suavizado para que sea “agradable” visualmente
             // (subimos k para que sea mucho más evidente en pantalla)
-            const k = 1 - Math.exp(-dtSeconds * 2.2);
+            const k = 1 - Math.exp(-dtSeconds * speedFactor * 2.2);
             sim.temp_c = sim.temp_c + (targetTemp - sim.temp_c) * k;
             sim.hum_pct = sim.hum_pct + (targetHum - sim.hum_pct) * k;
 
-            // riego por umbrales (histeresis)
-            if (!sim.riego && sim.hum_pct < sim.humRiegoOnBelow) sim.riego = true;
-            if (sim.riego && sim.hum_pct > sim.humRiegoOffAbove) sim.riego = false;
+            sim.soil_pct = clamp(sim.soil_pct + (sim.riego ? 0.035 : (sim.modoSeco ? -0.016 : -0.008)) * virtualMinutes, 0, 100);
+
+            const targetLux = 55000 * f;
+            sim.lux += (targetLux - sim.lux) * (1 - Math.exp(-virtualMinutes / 8));
+            const targetCo2 = sim.aire ? 420 : 800 + f * 120;
+            sim.co2_ppm += (targetCo2 - sim.co2_ppm) * (1 - Math.exp(-virtualMinutes / (sim.aire ? 5 : 90)));
+            const targetPh = sim.riego ? 6.15 : 6.25;
+            sim.ph += (targetPh - sim.ph) * (1 - Math.exp(-virtualMinutes / 360));
+
+            sim.temp_c = clamp(sim.temp_c, 14, 45);
+            sim.hum_pct = clamp(sim.hum_pct, 20, 95);
+            sim.lux = clamp(sim.lux, 0, 60000);
+            sim.co2_ppm = clamp(sim.co2_ppm, 350, 2000);
+            sim.ph = clamp(sim.ph, 5.5, 7.5);
+
+            if (sim.modoAutomatico) {
+                if (sim.temp_c >= 30) sim.aire = true;
+                if (sim.temp_c <= 27) sim.aire = false;
+                if (sim.soil_pct <= 35) sim.riego = true;
+                if (sim.soil_pct >= 60) sim.riego = false;
+            }
 
             // hora visible (UI) en UI
             simClockText.textContent = `Hora: ${minutesToHHMM(sim.minutesOfDay)}`;
         }
+
+        function syncLocalSimulationFromBackend() {
+            sim.temp_c = backendDevices.temperatura_c;
+            sim.hum_pct = backendDevices.humedad_pct;
+            sim.soil_pct = backendDevices.humedad_suelo_pct;
+            sim.lux = backendDevices.iluminancia_lux;
+            sim.co2_ppm = backendDevices.co2_ppm;
+            sim.ph = backendDevices.ph;
+            sim.aire = backendDevices.aire;
+            sim.riego = backendDevices.riego;
+            sim.modoAutomatico = backendDevices.modoAutomatico;
+            sim.modoCalor = backendDevices.modoCalor;
+            sim.modoSeco = backendDevices.modoSeco;
+            const [hours, minutes] = (backendDevices.horaVirtual || '18:45').split(':').map(Number);
+            sim.minutesOfDay = (hours * 60) + minutes;
+        }
+
+        const sensorMetadata = {
+            temperatura_c: { label: 'Temperatura', unit: '°C', color: '#ffab00' },
+            humedad_pct: { label: 'Humedad relativa', unit: '%', color: '#00e5ff' },
+            humedad_suelo_pct: { label: 'Humedad del suelo', unit: '%', color: '#2ecc71' },
+            iluminancia_lux: { label: 'Iluminancia', unit: 'lux', color: '#f5cf54' },
+            co2_ppm: { label: 'CO2', unit: 'ppm', color: '#90a4ae' },
+            ph: { label: 'pH', unit: 'pH', color: '#ff9800' }
+        };
+        const localHistory = [];
+        let lastLocalHistoryAt = 0;
+        let historyChart = null;
+        const historyVariable = document.getElementById('historyVariable');
+
+        function localHistoryForZone(zone, variable) {
+            const rows = localHistory.filter((sample) => zone === 'GENERAL' || sample.zone === zone);
+            if (zone !== 'GENERAL') {
+                return rows.map((sample) => ({ created_at: sample.created_at, value: sample[variable] }));
+            }
+
+            const grouped = new Map();
+            for (const sample of rows) {
+                const group = grouped.get(sample.created_at) || { created_at: sample.created_at, total: 0, count: 0 };
+                group.total += sample[variable];
+                group.count += 1;
+                grouped.set(sample.created_at, group);
+            }
+            return [...grouped.values()].map((sample) => ({
+                created_at: sample.created_at,
+                value: sample.total / sample.count
+            }));
+        }
+
+        function drawHistoryChart(measurements, source) {
+            const metadata = sensorMetadata[historyVariable.value];
+            const context = document.getElementById('historyChart');
+            const message = document.getElementById('historyMessage');
+            if (!window.Chart || !context) {
+                message.textContent = 'La gráfica requiere conexión para cargar Chart.js.';
+                return;
+            }
+
+            const points = measurements.map((sample) => ({
+                label: new Date(sample.created_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                value: Number(sample.value)
+            })).filter((sample) => Number.isFinite(sample.value));
+            const chartData = {
+                labels: points.map((point) => point.label),
+                datasets: [{
+                    data: points.map((point) => point.value),
+                    borderColor: metadata.color,
+                    backgroundColor: `${metadata.color}22`,
+                    fill: true,
+                    tension: 0.28,
+                    pointRadius: points.length > 36 ? 0 : 2,
+                    borderWidth: 2
+                }]
+            };
+
+            if (!historyChart) {
+                historyChart = new window.Chart(context, {
+                    type: 'line',
+                    data: chartData,
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { ticks: { color: '#7a8a7a', maxTicksLimit: 6 }, grid: { display: false } },
+                            y: { title: { display: true, text: metadata.unit, color: '#7a8a7a' }, ticks: { color: '#7a8a7a' }, grid: { color: 'rgba(255,255,255,0.07)' } }
+                        }
+                    }
+                });
+            } else {
+                historyChart.data = chartData;
+                historyChart.options.scales.y.title.text = metadata.unit;
+                historyChart.update('none');
+            }
+            message.textContent = points.length ? `${source} · ${points.length} muestras` : 'Sin mediciones todavía.';
+        }
+
+        async function loadDashboardHistory() {
+            const variable = historyVariable.value;
+            if (simModeSelect.value === 'sim') {
+                drawHistoryChart(localHistoryForZone(selectedZone, variable), 'Simulación local');
+                return;
+            }
+
+            const query = new URLSearchParams({ zone: selectedZone, variable, limit: '120' });
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/measurements?${query}`, { cache: 'no-store' });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                drawHistoryChart(data.measurements || [], 'Supabase');
+            } catch {
+                drawHistoryChart([], 'Backend');
+                document.getElementById('historyMessage').textContent = 'Historial no disponible. Ejecuta la migración measurements.';
+            }
+        }
+
+        function captureLocalHistory(force = false) {
+            const now = Date.now();
+            if (simModeSelect.value !== 'sim' || (!force && now - lastLocalHistoryAt < 5000)) return;
+            lastLocalHistoryAt = now;
+            const createdAt = new Date(now).toISOString();
+            for (const zone of ['A', 'B', 'C']) {
+                const values = measurementsForZone(zone);
+                localHistory.push({
+                    created_at: createdAt,
+                    zone,
+                    temperatura_c: values.temperatura_c,
+                    humedad_pct: values.humedad_pct,
+                    humedad_suelo_pct: values.humedad_suelo_pct,
+                    iluminancia_lux: values.iluminancia_lux,
+                    co2_ppm: values.co2_ppm,
+                    ph: values.ph
+                });
+            }
+            if (localHistory.length > 720) localHistory.splice(0, localHistory.length - 720);
+            drawHistoryChart(localHistoryForZone(selectedZone, historyVariable.value), 'Simulación local');
+        }
+
+        async function sendDashboardCommand(device, mode) {
+            if (simModeSelect.value === 'sim') {
+                if (device === 'automation') sim.modoAutomatico = mode === 'automatic';
+                else sim[device] = mode === 'on';
+                renderSensorCards();
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/action`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chatId: CHAT_ID, device, mode })
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                await obtenerEstado();
+            } catch (error) {
+                console.error('[Dashboard] No se pudo aplicar la acción.');
+            }
+        }
+
+        document.querySelectorAll('.zone-button').forEach((button) => {
+            button.addEventListener('click', () => {
+                selectedZone = button.dataset.zone;
+                document.querySelectorAll('.zone-button').forEach((item) => {
+                    const active = item === button;
+                    item.classList.toggle('active', active);
+                    item.setAttribute('aria-pressed', String(active));
+                });
+                renderSensorCards();
+                loadDashboardHistory();
+            });
+        });
+        historyVariable.addEventListener('change', loadDashboardHistory);
+        document.getElementById('modeManual').addEventListener('click', () => sendDashboardCommand('automation', 'manual'));
+        document.getElementById('modeAutomatic').addEventListener('click', () => sendDashboardCommand('automation', 'automatic'));
+        document.getElementById('irrigationAction').addEventListener('click', () => {
+            const on = simModeSelect.value === 'sim' ? sim.riego : backendDevices.riego;
+            sendDashboardCommand('riego', on ? 'off' : 'on');
+        });
+        document.getElementById('ventilationAction').addEventListener('click', () => {
+            const on = simModeSelect.value === 'sim' ? sim.aire : backendDevices.aire;
+            sendDashboardCommand('aire', on ? 'off' : 'on');
+        });
+        loadDashboardHistory();
+        setInterval(() => {
+            if (simModeSelect.value === 'backend') loadDashboardHistory();
+        }, 30000);
 
         async function obtenerEstado() {
             try {
@@ -1570,7 +2199,14 @@
                         riego: !!data.devices.riego,
                         temperatura_c: typeof data.devices.temperatura_c === 'number' ? data.devices.temperatura_c : 27,
                         humedad_pct: typeof data.devices.humedad_pct === 'number' ? data.devices.humedad_pct : 68,
-                        modoAutomatico: !!data.devices.modoAutomatico,
+                        humedad_suelo_pct: typeof data.devices.humedad_suelo_pct === 'number' ? data.devices.humedad_suelo_pct : 58,
+                        iluminancia_lux: typeof data.devices.iluminancia_lux === 'number' ? data.devices.iluminancia_lux : 0,
+                        co2_ppm: typeof data.devices.co2_ppm === 'number' ? data.devices.co2_ppm : 650,
+                        ph: typeof data.devices.ph === 'number' ? data.devices.ph : 6.2,
+                        zonas: data.devices.zonas && typeof data.devices.zonas === 'object' ? data.devices.zonas : {},
+                        modoCalor: !!data.devices.modoCalor,
+                        modoSeco: !!data.devices.modoSeco,
+                        modoAutomatico: data.devices.modoAutomatico !== false,
                         horaVirtual: data.devices.horaVirtual || '18:45',
                         timeScale: typeof data.devices.timeScale === 'number' && data.devices.timeScale > 0 ? data.devices.timeScale : 1
                     };
@@ -1613,6 +2249,11 @@
                     // mientras llega la siguiente lectura de /api/state (cada 2s).
                     backendDevices.temperatura_c = payload.temperatura_c;
                     backendDevices.humedad_pct = payload.humedad_pct;
+                    backendDevices.humedad_suelo_pct = payload.humedad_suelo_pct;
+                    backendDevices.iluminancia_lux = payload.iluminancia_lux;
+                    backendDevices.co2_ppm = payload.co2_ppm;
+                    backendDevices.ph = payload.ph;
+                    backendDevices.zonas = payload.zonas || backendDevices.zonas;
                     if (debugHud) renderHud();
                 }
             } catch (e) {
@@ -1635,7 +2276,15 @@
         }
         // Inicial y al cambiar el modo
         startCronPingerIfBackend();
-        simModeSelect.addEventListener('change', startCronPingerIfBackend);
+        simModeSelect.addEventListener('change', () => {
+            if (simModeSelect.value === 'sim') {
+                syncLocalSimulationFromBackend();
+                captureLocalHistory(true);
+            }
+            startCronPingerIfBackend();
+            renderSensorCards();
+            loadDashboardHistory();
+        });
 
         function actualizarAccionVisual(devices) {
             // Luz: en esta maqueta simulamos el encendido/apagado apagando intensidades de luces “físicas y aplicación”.
@@ -1653,6 +2302,7 @@
            BUCLE DE ANIMACIÓN
         ============================== */
         const clock = new THREE.Clock();
+          let lastDashboardRenderAt = 0;
 
         function animate() {
             requestAnimationFrame(animate);
@@ -1692,7 +2342,19 @@
                 // inyectamos al render como si vinieran del backend
                 backendDevices.temperatura_c = sim.temp_c;
                 backendDevices.humedad_pct = sim.hum_pct;
+                backendDevices.humedad_suelo_pct = sim.soil_pct;
+                backendDevices.iluminancia_lux = sim.lux;
+                backendDevices.co2_ppm = sim.co2_ppm;
+                backendDevices.ph = sim.ph;
+                backendDevices.aire = sim.aire;
                 backendDevices.riego = sim.riego;
+            }
+
+            const dashboardNow = performance.now();
+            if (isSimLocal && dashboardNow - lastDashboardRenderAt >= 250) {
+                lastDashboardRenderAt = dashboardNow;
+                renderSensorCards();
+                captureLocalHistory();
             }
 
             // Mantener hora virtual visible también en modo Backend
