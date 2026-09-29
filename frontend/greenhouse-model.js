@@ -524,12 +524,90 @@ function createIoTArchitecture(THREE, parent, zones, bedCenters, createLabel) {
   const environmentalStations = createIoTStations(THREE, zones, createLabel);
   const soilMoistureSensors = createSoilMoistureSensors(THREE, zones, bedCenters, createLabel);
   const phSensor = createPhSensor(THREE, parent, createLabel);
+  const devices = [];
+  const stateById = {};
+  const pickTargets = [];
+  const pickMaterial = new THREE.MeshBasicMaterial({
+    transparent: true,
+    opacity: 0,
+    colorWrite: false,
+    depthWrite: false,
+    side: THREE.DoubleSide
+  });
+
+  function registerDevice(object, metadata, state, pickGeometry) {
+    const device = { ...metadata };
+    object.userData.iotDevice = device;
+    const pickTarget = new THREE.Mesh(pickGeometry, pickMaterial);
+    pickTarget.name = `iot-pick-${device.id}`;
+    pickTarget.userData.iotPickTarget = true;
+    object.add(pickTarget);
+    devices.push({ ...device, object });
+    pickTargets.push(pickTarget);
+    stateById[device.id] = {
+      id: device.id,
+      type: device.type,
+      zone: device.zone,
+      status: state.status,
+      source: 'SIMULADO',
+      ...state.values
+    };
+  }
+
+  esp32Nodes.forEach((object, index) => {
+    const zone = ['A', 'B', 'C'][index];
+    registerDevice(object, { id: `ESP32-${zone}`, type: 'esp32', zone }, {
+      status: 'NORMAL',
+      values: { connection: 'CONECTADO', role: `Control local de la zona ${zone}` }
+    }, new THREE.BoxGeometry(0.62, 0.62, 0.48));
+  });
+
+  environmentalStations.forEach((object, index) => {
+    const zone = ['A', 'B', 'C'][index];
+    const stationReadings = [
+      { temperatureC: 24.8, relativeHumidityPct: 68, illuminanceLux: 18400, co2Ppm: 620 },
+      { temperatureC: 29.6, relativeHumidityPct: 59, illuminanceLux: 22100, co2Ppm: 710 },
+      { temperatureC: 31.2, relativeHumidityPct: 54, illuminanceLux: 19700, co2Ppm: 835 }
+    ][index];
+    registerDevice(object, { id: `ENV-${zone}`, type: 'environmental-station', zone }, {
+      status: index === 2 ? 'ADVERTENCIA' : 'NORMAL',
+      values: stationReadings
+    }, new THREE.SphereGeometry(0.38, 8, 6));
+  });
+
+  soilMoistureSensors.forEach((object, index) => {
+    const bedNumber = index + 1;
+    const zone = ['A', 'A', 'B', 'B', 'C', 'C'][index];
+    const moisture = [58, 54, 61, 47, 28, null][index];
+    registerDevice(object, {
+      id: `SOIL-C${bedNumber}`,
+      type: 'soil-moisture',
+      zone,
+      bed: `C${bedNumber}`
+    }, {
+      status: moisture === null ? 'SIN DATOS' : moisture < 30 ? 'CRÍTICO' : moisture < 45 ? 'ADVERTENCIA' : 'NORMAL',
+      values: { soilMoisturePct: moisture }
+    }, new THREE.SphereGeometry(0.26, 8, 6));
+  });
+
+  registerDevice(phSensor, {
+    id: 'PH-01',
+    type: 'ph-sensor',
+    zone: 'SERVICIO'
+  }, {
+    status: 'NORMAL',
+    values: { ph: 6.2, location: 'Punto de servicio del riego' }
+  }, new THREE.SphereGeometry(0.28, 8, 6));
+
   return {
     zones,
     esp32Nodes,
     environmentalStations,
     soilMoistureSensors,
     phSensor,
+    devices,
+    stateById,
+    pickTargets,
     counts: {
       esp32: esp32Nodes.length,
       environmentalStations: environmentalStations.length,

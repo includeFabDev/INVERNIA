@@ -288,6 +288,102 @@
             color: #baf4ce;
         }
 
+        .iot-inspector {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid rgba(103, 174, 135, 0.28);
+            border-radius: 8px;
+            background: rgba(28, 51, 37, 0.38);
+        }
+
+        .iot-inspector[hidden] {
+            display: none;
+        }
+
+        .iot-inspector-heading {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .iot-inspector-kicker {
+            color: #9cb4a4;
+            font-size: 8px;
+            font-weight: 700;
+        }
+
+        .iot-inspector-title {
+            margin-top: 2px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .iot-inspector-close {
+            width: 24px;
+            height: 24px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--fg);
+            cursor: pointer;
+        }
+
+        .iot-status {
+            display: inline-flex;
+            padding: 3px 7px;
+            border: 1px solid currentColor;
+            border-radius: 5px;
+            font-size: 8px;
+            font-weight: 700;
+        }
+
+        .iot-status[data-state="NORMAL"] { color: #7ce0a0; }
+        .iot-status[data-state="ADVERTENCIA"] { color: #e9c46a; }
+        .iot-status[data-state="CRÍTICO"] { color: #f08a7e; }
+        .iot-status[data-state="SIN DATOS"] { color: #a8b2aa; }
+
+        .iot-inspector-note {
+            margin-top: 8px;
+            color: #9cab9d;
+            font-size: 8px;
+        }
+
+        .iot-detail-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+            gap: 5px 10px;
+            font-size: 9px;
+        }
+
+        .iot-detail-label { color: #9cab9d; }
+        .iot-detail-value { text-align: right; overflow-wrap: anywhere; }
+
+        .iot-zone-devices {
+            display: grid;
+            gap: 4px;
+            margin-top: 8px;
+        }
+
+        .iot-zone-device {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 6px 7px;
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.035);
+            color: var(--fg);
+            font: 600 9px 'Space Grotesk', sans-serif;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .iot-zone-device span:last-child {
+            font-weight: 400;
+        }
+
         .dashboard-section {
             margin-top: 12px;
             padding-top: 10px;
@@ -628,6 +724,16 @@
             <button class="zone-button" type="button" data-zone="B" aria-pressed="false">ZONA B</button>
             <button class="zone-button" type="button" data-zone="C" aria-pressed="false">ZONA C</button>
         </div>
+        <section class="iot-inspector" id="iotInspector" aria-live="polite" hidden>
+            <header class="iot-inspector-heading">
+                <div>
+                    <div class="iot-inspector-kicker" id="iotInspectorKicker">GEMELO DIGITAL</div>
+                    <h3 class="iot-inspector-title" id="iotInspectorTitle">Dispositivo IoT</h3>
+                </div>
+                <button class="iot-inspector-close" id="iotInspectorClose" type="button" aria-label="Cerrar detalle">×</button>
+            </header>
+            <div id="iotInspectorBody"></div>
+        </section>
         <div class="sensor-grid">
             <article class="sensor-card"><div class="sensor-name">TEMPERATURA</div><div class="sensor-reading"><span class="sensor-value" id="sensorTemp">27.0</span><span class="sensor-unit">°C</span></div></article>
             <article class="sensor-card"><div class="sensor-name">HUMEDAD RELATIVA</div><div class="sensor-reading"><span class="sensor-value" id="sensorHumidity">68.0</span><span class="sensor-unit">%</span></div></article>
@@ -1624,6 +1730,178 @@
         const layerDesc = document.getElementById('layerDesc');
         const layerElements = document.getElementById('layerElements');
         const navBtns = document.querySelectorAll('.nav-btn');
+        const iotArchitecture = greenhouseModel.userData.iotArchitecture;
+        const iotInspector = document.getElementById('iotInspector');
+        const iotInspectorKicker = document.getElementById('iotInspectorKicker');
+        const iotInspectorTitle = document.getElementById('iotInspectorTitle');
+        const iotInspectorBody = document.getElementById('iotInspectorBody');
+        const iotRaycaster = new THREE.Raycaster();
+        const iotPointer = new THREE.Vector2();
+        let selectedIotEntry = null;
+        let pointerDownPosition = null;
+        let pointerDragged = false;
+
+        const iotTypeLabels = {
+            esp32: 'Nodo de control ESP32',
+            'environmental-station': 'Estación ambiental',
+            'soil-moisture': 'Sensor de humedad del suelo',
+            'ph-sensor': 'Sensor de pH'
+        };
+
+        function addIotDetailRow(label, value, container = iotInspectorBody) {
+            const labelElement = document.createElement('span');
+            labelElement.className = 'iot-detail-label';
+            labelElement.textContent = label;
+            const valueElement = document.createElement('span');
+            valueElement.className = 'iot-detail-value';
+            valueElement.textContent = value;
+            container.append(labelElement, valueElement);
+        }
+
+        function addIotStatusRow(container, state) {
+            const label = document.createElement('span');
+            label.className = 'iot-detail-label';
+            label.textContent = 'ESTADO';
+            const badge = document.createElement('span');
+            badge.className = 'iot-status';
+            badge.dataset.state = state;
+            badge.textContent = state;
+            container.append(label, badge);
+        }
+
+        function showIotDevice(entry) {
+            const state = iotArchitecture.stateById[entry.id];
+            iotInspector.hidden = false;
+            iotInspectorKicker.textContent = iotTypeLabels[entry.type] || 'Dispositivo IoT';
+            iotInspectorTitle.textContent = entry.id;
+            iotInspectorBody.replaceChildren();
+
+            const details = document.createElement('div');
+            details.className = 'iot-detail-grid';
+            iotInspectorBody.appendChild(details);
+            addIotStatusRow(details, state.status);
+            if (entry.type === 'esp32') {
+                addIotDetailRow('ZONA', `Zona ${entry.zone}`, details);
+                addIotDetailRow('CONEXIÓN', state.connection, details);
+                addIotDetailRow('FUNCIÓN', state.role, details);
+            } else if (entry.type === 'environmental-station') {
+                addIotDetailRow('ZONA', `Zona ${entry.zone}`, details);
+                addIotDetailRow('TEMPERATURA', `${state.temperatureC.toFixed(1)} °C`, details);
+                addIotDetailRow('HUMEDAD RELATIVA', `${state.relativeHumidityPct}%`, details);
+                addIotDetailRow('ILUMINACIÓN', `${state.illuminanceLux} lux`, details);
+                addIotDetailRow('CO₂', `${state.co2Ppm} ppm`, details);
+            } else if (entry.type === 'soil-moisture') {
+                addIotDetailRow('HUMEDAD DEL SUELO', state.soilMoisturePct === null ? 'SIN DATOS' : `${state.soilMoisturePct}%`, details);
+                addIotDetailRow('ZONA', `Zona ${entry.zone}`, details);
+                addIotDetailRow('CAMELLÓN', entry.bed, details);
+            } else if (entry.type === 'ph-sensor') {
+                addIotDetailRow('VALOR pH', state.ph.toFixed(1), details);
+                addIotDetailRow('PUNTO', state.location, details);
+            }
+            const note = document.createElement('p');
+            note.className = 'iot-inspector-note';
+            note.textContent = `VALORES SIMULADOS · ${state.source}`;
+            iotInspectorBody.appendChild(note);
+        }
+
+        function showIotZoneSummary(zone) {
+            if (selectedIotEntry) selectedIotEntry.object.scale.set(1, 1, 1);
+            selectedIotEntry = null;
+            if (zone === 'GENERAL') {
+                iotInspector.hidden = true;
+                return;
+            }
+            const entries = iotArchitecture.devices.filter((entry) => entry.zone === zone);
+            iotInspector.hidden = false;
+            iotInspectorKicker.textContent = 'RESUMEN DE ZONA';
+            iotInspectorTitle.textContent = `Zona ${zone} · ${entries.length} dispositivos`;
+            iotInspectorBody.replaceChildren();
+            const list = document.createElement('div');
+            list.className = 'iot-zone-devices';
+            entries.forEach((entry) => {
+                const button = document.createElement('button');
+                button.className = 'iot-zone-device';
+                button.type = 'button';
+                button.dataset.iotId = entry.id;
+                const id = document.createElement('span');
+                id.textContent = entry.id;
+                const status = document.createElement('span');
+                status.className = 'iot-status';
+                status.dataset.state = iotArchitecture.stateById[entry.id].status;
+                status.textContent = iotArchitecture.stateById[entry.id].status;
+                button.append(id, status);
+                list.appendChild(button);
+            });
+            iotInspectorBody.appendChild(list);
+            const note = document.createElement('p');
+            note.className = 'iot-inspector-note';
+            note.textContent = 'RESUMEN SIMULADO · SIN DATOS REALES';
+            iotInspectorBody.appendChild(note);
+        }
+
+        function selectIotDevice(entry) {
+            if (selectedIotEntry) selectedIotEntry.object.scale.set(1, 1, 1);
+            selectedIotEntry = entry;
+            selectedIotEntry.object.scale.set(1.12, 1.12, 1.12);
+            showIotDevice(entry);
+        }
+
+        function raycastIotDevice(event) {
+            const bounds = renderer.domElement.getBoundingClientRect();
+            iotPointer.set(
+                ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
+                -((event.clientY - bounds.top) / bounds.height) * 2 + 1
+            );
+            iotRaycaster.setFromCamera(iotPointer, camera);
+            const hit = iotRaycaster.intersectObjects(iotArchitecture.pickTargets, false)[0];
+            if (!hit) return null;
+            let object = hit.object;
+            while (object && !object.userData.iotDevice) object = object.parent;
+            if (!object) return null;
+            return iotArchitecture.devices.find((entry) => entry.id === object.userData.iotDevice.id) || null;
+        }
+
+        renderer.domElement.addEventListener('pointerdown', (event) => {
+            pointerDownPosition = { x: event.clientX, y: event.clientY };
+            pointerDragged = false;
+        });
+        renderer.domElement.addEventListener('pointermove', (event) => {
+            if (pointerDownPosition
+                && Math.hypot(event.clientX - pointerDownPosition.x, event.clientY - pointerDownPosition.y) > 6) {
+                pointerDragged = true;
+            }
+            if (!pointerDownPosition) {
+                renderer.domElement.style.cursor = raycastIotDevice(event) ? 'pointer' : 'grab';
+            }
+        });
+        renderer.domElement.addEventListener('pointercancel', () => {
+            pointerDownPosition = null;
+            pointerDragged = false;
+        });
+        renderer.domElement.addEventListener('pointerup', (event) => {
+            if (!pointerDownPosition) return;
+            const moved = Math.hypot(event.clientX - pointerDownPosition.x, event.clientY - pointerDownPosition.y);
+            pointerDownPosition = null;
+            if (pointerDragged || moved > 6) {
+                pointerDragged = false;
+                return;
+            }
+            pointerDragged = false;
+            const entry = raycastIotDevice(event);
+            if (entry) selectIotDevice(entry);
+        });
+
+        document.getElementById('iotInspectorClose').addEventListener('click', () => {
+            iotInspector.hidden = true;
+            if (selectedIotEntry) selectedIotEntry.object.scale.set(1, 1, 1);
+            selectedIotEntry = null;
+        });
+        iotInspectorBody.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-iot-id]');
+            if (!button) return;
+            const entry = iotArchitecture.devices.find((device) => device.id === button.dataset.iotId);
+            if (entry) selectIotDevice(entry);
+        });
 
         function showLayerInfo(layerKey) {
             const data = layerData[layerKey];
@@ -2181,6 +2459,7 @@
                 });
                 renderSensorCards();
                 loadDashboardHistory();
+                showIotZoneSummary(selectedZone);
             });
         });
         historyVariable.addEventListener('change', loadDashboardHistory);
