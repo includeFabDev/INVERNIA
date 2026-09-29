@@ -2382,6 +2382,8 @@
                 backendDevices.fuenteDatos = 'simulation';
             }
 
+            greenhouseModel.userData.irrigation.updateVisualState(!!backendDevices.riego, elapsed);
+
             const dashboardNow = performance.now();
             if (isSimLocal && dashboardNow - lastDashboardRenderAt >= 250) {
                 lastDashboardRenderAt = dashboardNow;
