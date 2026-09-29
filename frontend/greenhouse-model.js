@@ -294,6 +294,7 @@ function createBeds(THREE, parent, createLabel) {
   const soilMaterial = new THREE.MeshStandardMaterial({ color: 0x76553b, roughness: 1 });
   const bedGroup = new THREE.Group();
   const bedCenters = [];
+  const bedMeshes = [];
 
   for (let index = 0; index < GREENHOUSE.bedCount; index++) {
     const x = firstCenter + index * (GREENHOUSE.bedWidth + GREENHOUSE.aisleWidth);
@@ -304,13 +305,32 @@ function createBeds(THREE, parent, createLabel) {
     );
     bed.position.set(x, GREENHOUSE.bedHeight / 2, 0);
     bedGroup.add(bed);
+    bedMeshes.push(bed);
 
     const label = createLabel(`C${index + 1}`, '#c4d9b0', 0.27);
     label.position.set(x, GREENHOUSE.bedHeight + 0.08, GREENHOUSE.length / 2 - GREENHOUSE.bedLengthInset / 2);
     bedGroup.add(label);
   }
   parent.add(bedGroup);
-  return { group: bedGroup, centers: bedCenters };
+  return { group: bedGroup, centers: bedCenters, meshes: bedMeshes };
+}
+
+function createBedSelection(THREE, parent, bedMeshes) {
+  const material = new THREE.LineBasicMaterial({ color: 0x6be6d0, transparent: true, opacity: 0.95 });
+  const outlines = bedMeshes.map((bed) => {
+    const outline = new THREE.LineSegments(new THREE.EdgesGeometry(bed.geometry), material);
+    outline.position.copy(bed.position);
+    outline.visible = false;
+    parent.add(outline);
+    return outline;
+  });
+
+  return {
+    setBedHighlight(camellon) {
+      const index = Number(String(camellon || '').replace('C', '')) - 1;
+      outlines.forEach((outline, outlineIndex) => { outline.visible = outlineIndex === index; });
+    }
+  };
 }
 
 function createAntechamber(THREE, parent, createLabel) {
@@ -877,10 +897,19 @@ export function createGreenhouseModel(THREE, createLabel) {
   createAntechamber(THREE, group, createLabel);
   const zones = createZoneGroups(THREE, group, createLabel);
   const irrigationService = createIrrigationService(THREE, group, createLabel);
+  const serviceHighlight = new THREE.Mesh(
+    new THREE.TorusGeometry(1.45, 0.028, 8, 64),
+    new THREE.MeshBasicMaterial({ color: 0x6be6d0, transparent: true, opacity: 0.9, depthWrite: false })
+  );
+  serviceHighlight.rotation.x = -Math.PI / 2;
+  serviceHighlight.position.set(IRRIGATION.serviceCenterX, 0.08, IRRIGATION.serviceCenterZ);
+  serviceHighlight.visible = false;
+  group.add(serviceHighlight);
   const manifold = createIrrigationManifold(THREE, group, beds.centers, irrigationService, createLabel);
   const emitters = createEmitters(THREE, group, beds.centers);
   const updatePulses = createWaterPulses(THREE, group, beds.centers);
   const iotArchitecture = createIoTArchitecture(THREE, group, zones, beds.centers, createLabel);
+  const bedSelection = createBedSelection(THREE, group, beds.meshes);
   const irrigation = {
     serviceGroup: irrigationService.group,
     manifoldGroup: manifold.group,
@@ -895,7 +924,9 @@ export function createGreenhouseModel(THREE, createLabel) {
   group.userData = { dimensions: { ...GREENHOUSE }, bedCenters: beds.centers, irrigation, ventilation: {
     group: ventilation.group,
     updateVisualState: (active, elapsed) => updateVentilationVisualState(ventilation, active, elapsed)
-  }, iotArchitecture, ...zones };
+  }, iotArchitecture, setBedHighlight: bedSelection.setBedHighlight, setServiceHighlight: (active) => {
+    serviceHighlight.visible = active;
+  }, ...zones };
   return group;
 }
 
