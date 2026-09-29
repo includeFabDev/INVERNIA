@@ -98,23 +98,31 @@ async function answerTelegramCallbackQuery(callbackQueryId, text = '') {
 /**
  * Genera el texto con el estado actual del invernadero/Smart Home.
  */
-function getStatusText(state) {
-  const luzStr = state.luz ? '💡 ENCENDIDA' : '🔌 APAGADA';
-  const aireStr = state.aire ? '🌬️ ENCENDIDO' : '❄️ APAGADO';
-  const riegoStr = state.riego ? '🌱 ACTIVO' : '🚫 DETENIDO';
-  const tempStr = typeof state.temperatura_c === 'number' ? `${state.temperatura_c.toFixed(1)}°C` : '--°C';
-  const humStr = typeof state.humedad_pct === 'number' ? `${state.humedad_pct.toFixed(0)}%` : '--%';
-  const horaStr = state.horaVirtual || '--:--';
-  const autoStr = state.modoAutomatico ? '🤖 ACTIVADO' : '🔧 MANUAL';
+function getStatusText(state, zone = 'GENERAL') {
+  const measurements = zone === 'GENERAL' ? state : (state.zonas?.[zone] || state);
+  const temperature = typeof measurements.temperatura_c === 'number' ? `${measurements.temperatura_c.toFixed(1)} °C` : '-- °C';
+  const relativeHumidity = typeof measurements.humedad_pct === 'number' ? `${measurements.humedad_pct.toFixed(0)} %` : '-- %';
+  const soilMoisture = typeof measurements.humedad_suelo_pct === 'number' ? `${measurements.humedad_suelo_pct.toFixed(0)} %` : '-- %';
+  const illuminance = typeof measurements.iluminancia_lux === 'number' ? `${Math.round(measurements.iluminancia_lux)} lux` : '-- lux';
+  const co2 = typeof measurements.co2_ppm === 'number' ? `${Math.round(measurements.co2_ppm)} ppm` : '-- ppm';
+  const ph = typeof measurements.ph === 'number' ? measurements.ph.toFixed(2) : '--';
+  const mode = state.modoAutomatico !== false ? 'AUTOMÁTICO' : 'MANUAL';
+  const irrigation = state.riego ? 'ON' : 'OFF';
+  const ventilation = state.aire ? 'ON' : 'OFF';
+  const source = measurements.fuenteDatos || state.fuenteDatos || 'simulation';
 
   return [
-    `💡 *Luz:* ${luzStr}`,
-    `🌬️ *Ventilador:* ${aireStr}`,
-    `🌱 *Riego:* ${riegoStr}`,
-    `🌡️ *Temperatura:* ${tempStr}`,
-    `💦 *Humedad:* ${humStr}`,
-    `🕒 *Hora Virtual:* ${horaStr}`,
-    `🤖 *Modo Automático:* ${autoStr}`
+    `*INVERNIA · ${zone === 'GENERAL' ? 'GENERAL' : `ZONA ${zone}`}*`,
+    `Temperatura: ${temperature}`,
+    `Humedad relativa: ${relativeHumidity}`,
+    `Humedad del suelo: ${soilMoisture}`,
+    `Iluminancia: ${illuminance}`,
+    `CO₂: ${co2}`,
+    `pH: ${ph}`,
+    `Modo: ${mode}`,
+    `Riego: ${irrigation}`,
+    `Ventilación: ${ventilation}`,
+    `Fuente: ${source === 'physical' ? 'DISPOSITIVO IoT' : 'SIMULACIÓN'}`
   ].join('\n');
 }
 
@@ -124,6 +132,12 @@ function getStatusText(state) {
  */
 function buildDynamicKeyboard(state) {
   const keyboard = [];
+  keyboard.push([
+    { text: 'GENERAL', callback_data: 'zone_GENERAL' },
+    { text: 'ZONA A', callback_data: 'zone_A' },
+    { text: 'ZONA B', callback_data: 'zone_B' },
+    { text: 'ZONA C', callback_data: 'zone_C' }
+  ]);
 
   // Fila Luz
   if (state.luz) {
@@ -182,9 +196,13 @@ export function telegramWebhookRoute(supabase) {
       if (isCallback && callbackQueryId && callbackData) {
         console.log(`[Telegram Webhook] Callback recibida. Chat: ${chatId}, Data: ${callbackData}`);
         let messageAck = 'Actualizando...';
+        let selectedZone = 'GENERAL';
 
         // Procesar acciones siempre sobre el dbChatId fijo
-        if (callbackData === 'luz_on') {
+        if (['zone_GENERAL', 'zone_A', 'zone_B', 'zone_C'].includes(callbackData)) {
+          selectedZone = callbackData.slice('zone_'.length);
+          messageAck = selectedZone === 'GENERAL' ? 'Estado general' : `Estado de Zona ${selectedZone}`;
+        } else if (callbackData === 'luz_on') {
           await executeAction(supabase, { action: 'turn_on', device: 'luz' }, dbChatId);
           messageAck = '💡 Luz encendida';
         } else if (callbackData === 'luz_off') {
@@ -220,7 +238,7 @@ export function telegramWebhookRoute(supabase) {
 
         // 2. Obtener estado nuevo de la base de datos fija y editar el mensaje existente
         const current = await ensureDeviceState(supabase, dbChatId);
-        const statusText = getStatusText(current.state);
+        const statusText = getStatusText(current.state, selectedZone);
         const keyboard = buildDynamicKeyboard(current.state);
         
         const updateText = `🎛️ *Panel de Control - Smart Home / Invernadero*\n\n${statusText}`;

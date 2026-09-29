@@ -32,7 +32,8 @@ export function createZoneMeasurements(baseState, previousZones = null, alpha = 
       ph: clamp(baseState.ph ?? 6.2, 5.5, 7.5)
     };
 
-    zones[zone] = {};
+    const metadata = Object.fromEntries(Object.entries(previous).filter(([field]) => !SENSOR_FIELDS.includes(field)));
+    zones[zone] = { ...metadata };
     for (const field of SENSOR_FIELDS) {
       const current = previous[field];
       zones[zone][field] = typeof current === 'number'

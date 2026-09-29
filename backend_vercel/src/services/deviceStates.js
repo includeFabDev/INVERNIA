@@ -13,6 +13,7 @@ const DEFAULT_STATE = {
   modoCalor: false,
   modoSeco: false,
   modoAutomatico: true,
+  fuenteDatos: 'simulation',
 
   // Reloj
   // Retrocompatibilidad: si no existen estos campos en registros antiguos,

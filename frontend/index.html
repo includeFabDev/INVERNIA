@@ -201,6 +201,16 @@
             font-size: 10px;
         }
 
+        .system-status {
+            color: #76e6a2 !important;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .system-status.offline {
+            color: #e58a7d !important;
+        }
+
         .sensor-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -607,7 +617,10 @@
     <section class="monitor-panel" aria-label="Monitoreo INVERNIA">
         <div class="monitor-heading">
             <h2>INVERNIA · MONITOREO</h2>
-            <span id="monitorSource">Conectando</span>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+                <span id="monitorSource">FUENTE: SIMULACIÓN</span>
+                <span id="systemStatus" class="system-status">SISTEMA ONLINE</span>
+            </div>
         </div>
         <div class="zone-selector" role="group" aria-label="Sector de muestreo">
             <button class="zone-button active" type="button" data-zone="GENERAL" aria-pressed="true">GENERAL</button>
@@ -1678,12 +1691,13 @@
         ============================== */
         const CHAT_ID = 123456789; // chat.id real de Telegram
         let selectedZone = 'GENERAL';
+        let backendConnected = false;
         let backendDevices = {
             luz: false, aire: false, riego: false,
             temperatura_c: 27, humedad_pct: 68, humedad_suelo_pct: 58,
             iluminancia_lux: 0, co2_ppm: 650, ph: 6.2, zonas: {},
             modoAutomatico: true, modoCalor: false, modoSeco: false,
-            horaVirtual: '18:45', timeScale: 1
+            horaVirtual: '18:45', timeScale: 1, fuenteDatos: 'simulation'
         };
 
         // Debug HUD (para demo): muestra el estado que está leyendo el frontend
@@ -1766,12 +1780,14 @@
                 }
             }
             const source = document.getElementById('monitorSource');
-            if (source) source.textContent = simModeSelect.value === 'sim' ? 'Simulación local' : 'Backend';
+            const dataSource = simModeSelect.value === 'sim' ? 'simulation' : backendDevices.fuenteDatos;
+            if (source) source.textContent = `FUENTE: ${dataSource === 'physical' ? 'DISPOSITIVO IoT' : 'SIMULACIÓN'}`;
             renderDashboardControls();
         }
 
         function renderDashboardControls() {
             const local = simModeSelect.value === 'sim';
+            const online = local || backendConnected;
             const automatic = local ? sim.modoAutomatico : backendDevices.modoAutomatico !== false;
             const irrigationOn = local ? sim.riego : !!backendDevices.riego;
             const ventilationOn = local ? sim.aire : !!backendDevices.aire;
@@ -1784,6 +1800,9 @@
             document.getElementById('ventilationState').textContent = ventilationOn ? 'ON' : 'OFF';
             document.getElementById('irrigationIndicator').classList.toggle('on', irrigationOn);
             document.getElementById('ventilationIndicator').classList.toggle('on', ventilationOn);
+            const systemStatus = document.getElementById('systemStatus');
+            systemStatus.textContent = online ? 'SISTEMA ONLINE' : 'SISTEMA OFFLINE';
+            systemStatus.classList.toggle('offline', !online);
             for (const id of ['irrigationAction', 'ventilationAction']) {
                 const button = document.getElementById(id);
                 button.disabled = automatic;
@@ -2192,6 +2211,7 @@
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const data = await response.json();
                 if (data?.devices) {
+                    backendConnected = true;
                     backendDevices = {
                         luz: !!data.devices.luz,
                         aire: !!data.devices.aire,
@@ -2207,7 +2227,8 @@
                         modoSeco: !!data.devices.modoSeco,
                         modoAutomatico: data.devices.modoAutomatico !== false,
                         horaVirtual: data.devices.horaVirtual || '18:45',
-                        timeScale: typeof data.devices.timeScale === 'number' && data.devices.timeScale > 0 ? data.devices.timeScale : 1
+                        timeScale: typeof data.devices.timeScale === 'number' && data.devices.timeScale > 0 ? data.devices.timeScale : 1,
+                        fuenteDatos: data.devices.fuenteDatos || 'simulation'
                     };
                     console.log("[HTML] backendDevices updated:", backendDevices, "raw:", data);
                     if (debugHud) renderHud();
@@ -2223,6 +2244,8 @@
                 }
             } catch (e) {
                 // si falla el backend, dejamos el último estado (no rompemos la escena)
+                backendConnected = false;
+                renderSensorCards();
                 console.error("[HTML] No se pudo leer /api/state:", e);
             }
         }
@@ -2250,6 +2273,7 @@
                     backendDevices.co2_ppm = payload.co2_ppm;
                     backendDevices.ph = payload.ph;
                     backendDevices.zonas = payload.zonas || backendDevices.zonas;
+                    backendDevices.fuenteDatos = payload.fuenteDatos || backendDevices.fuenteDatos;
                     if (debugHud) renderHud();
                 }
             } catch (e) {
@@ -2344,6 +2368,7 @@
                 backendDevices.ph = sim.ph;
                 backendDevices.aire = sim.aire;
                 backendDevices.riego = sim.riego;
+                backendDevices.fuenteDatos = 'simulation';
             }
 
             const dashboardNow = performance.now();

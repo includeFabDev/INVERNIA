@@ -34,6 +34,7 @@ export function stateRoute(supabase) {
           modoCalor: !!merged.modoCalor,
           modoSeco: !!merged.modoSeco,
           modoAutomatico: !!merged.modoAutomatico,
+          fuenteDatos: merged.fuenteDatos || 'simulation',
           horaVirtual: merged.horaVirtual,
           usarHoraReal: merged.usarHoraReal,
           timeScale: merged.timeScale

@@ -8,6 +8,7 @@ import { telegramWebhookRoute } from './routes/telegram.js';
 import { ensureDeviceState } from './services/deviceStates.js';
 import { actionRoute } from './routes/action.js';
 import { measurementsRoute } from './routes/measurements.js';
+import { telemetryRoute } from './routes/telemetry.js';
 
 
 export function createApp() {
@@ -34,6 +35,7 @@ export function createApp() {
   }));
 
   app.get('/api/measurements', awaitableHandler(measurementsRoute(supabase)));
+  app.post('/api/v1/telemetry', awaitableHandler(telemetryRoute(supabase)));
   app.post('/api/telegram-webhook', awaitableHandler(telegramWebhookRoute(supabase)));
   app.post('/api/action', awaitableHandler(actionRoute(supabase)));
 

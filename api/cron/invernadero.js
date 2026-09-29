@@ -1,8 +1,10 @@
 import { getSupabaseClient } from '../../backend_vercel/src/services/supabaseClient.js';
 import { ensureDeviceState, getDefaultState, saveDeviceState } from '../../backend_vercel/src/services/deviceStates.js';
 import { averageZoneMeasurements, createZoneMeasurements } from '../../backend_vercel/src/services/zones.js';
+import { evaluateSystemEvents } from '../../backend_vercel/src/services/events.js';
 
 const MEASUREMENT_INTERVAL_MS = 60_000;
+const PHYSICAL_ZONE_TTL_MS = 5 * 60_000;
 let measurementsTableUnavailable = false;
 let lastMeasurementsWarningAt = 0;
 
@@ -65,7 +67,27 @@ async function persistZoneMeasurements(supabase, state) {
 
 function updateZonesAndAverages(state, previousZones, dtSeconds, timeScale) {
   const alpha = 1 - Math.exp(-Math.min(120, dtSeconds * timeScale) / 30);
-  state.zonas = createZoneMeasurements(state, previousZones, alpha);
+  const simulatedZones = createZoneMeasurements(state, previousZones, alpha);
+  const now = Date.now();
+  state.zonas = {};
+  for (const zone of ['A', 'B', 'C']) {
+    const previous = previousZones[zone] || {};
+    const updatedAt = Date.parse(previous.updated_at || '');
+    const physicalIsFresh = previous.fuenteDatos === 'physical'
+      && Number.isFinite(updatedAt)
+      && now - updatedAt <= PHYSICAL_ZONE_TTL_MS;
+    if (physicalIsFresh) {
+      state.zonas[zone] = { ...simulatedZones[zone], ...previous, fuenteDatos: 'physical' };
+    } else {
+      const simulated = { ...simulatedZones[zone], fuenteDatos: 'simulation' };
+      delete simulated.device_id;
+      delete simulated.updated_at;
+      state.zonas[zone] = simulated;
+    }
+  }
+  state.fuenteDatos = Object.values(state.zonas).some((zone) => zone.fuenteDatos === 'physical')
+    ? 'physical'
+    : 'simulation';
   Object.assign(state, averageZoneMeasurements(state.zonas));
 }
 
@@ -290,6 +312,7 @@ export default async function handler(req, res) {
     const modoAutomatico = state.modoAutomatico !== false;
     const nextState = applyClimateRules(state, actuators, dtSeconds, timeScale);
     updateZonesAndAverages(nextState, previousZones, dtSeconds, timeScale);
+    await evaluateSystemEvents(supabase, persistedState, nextState, modoAutomatico ? 'automatic' : 'manual');
     if (typeof state.horaVirtual === 'string') nextState.horaVirtual = state.horaVirtual;
     nextState.__lastCronMs = Date.now();
 
@@ -307,6 +330,7 @@ export default async function handler(req, res) {
       iluminancia_lux: nextState.iluminancia_lux,
       co2_ppm: nextState.co2_ppm,
       ph: nextState.ph,
+      fuenteDatos: nextState.fuenteDatos,
       zonas: nextState.zonas
     });
   } catch (err) {
