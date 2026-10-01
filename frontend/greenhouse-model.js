@@ -294,6 +294,7 @@ function createBeds(THREE, parent, createLabel) {
   const soilMaterial = new THREE.MeshStandardMaterial({ color: 0x76553b, roughness: 1 });
   const bedGroup = new THREE.Group();
   const bedCenters = [];
+  const bedMeshes = [];
 
   for (let index = 0; index < GREENHOUSE.bedCount; index++) {
     const x = firstCenter + index * (GREENHOUSE.bedWidth + GREENHOUSE.aisleWidth);
@@ -304,13 +305,32 @@ function createBeds(THREE, parent, createLabel) {
     );
     bed.position.set(x, GREENHOUSE.bedHeight / 2, 0);
     bedGroup.add(bed);
+    bedMeshes.push(bed);
 
     const label = createLabel(`C${index + 1}`, '#c4d9b0', 0.27);
     label.position.set(x, GREENHOUSE.bedHeight + 0.08, GREENHOUSE.length / 2 - GREENHOUSE.bedLengthInset / 2);
     bedGroup.add(label);
   }
   parent.add(bedGroup);
-  return { group: bedGroup, centers: bedCenters };
+  return { group: bedGroup, centers: bedCenters, meshes: bedMeshes };
+}
+
+function createBedSelection(THREE, parent, bedMeshes) {
+  const material = new THREE.LineBasicMaterial({ color: 0x6be6d0, transparent: true, opacity: 0.95 });
+  const outlines = bedMeshes.map((bed) => {
+    const outline = new THREE.LineSegments(new THREE.EdgesGeometry(bed.geometry), material);
+    outline.position.copy(bed.position);
+    outline.visible = false;
+    parent.add(outline);
+    return outline;
+  });
+
+  return {
+    setBedHighlight(camellon) {
+      const index = Number(String(camellon || '').replace('C', '')) - 1;
+      outlines.forEach((outline, outlineIndex) => { outline.visible = outlineIndex === index; });
+    }
+  };
 }
 
 function createAntechamber(THREE, parent, createLabel) {
@@ -366,6 +386,8 @@ function createAntechamber(THREE, parent, createLabel) {
 
 function createZoneGroups(THREE, parent, createLabel) {
   const zones = {};
+  const zoneTints = {};
+  const zoneTargets = [];
   const zoneLength = GREENHOUSE.length / 3;
   const colors = [0x70a98e, 0x9ba577, 0x6c9cb0];
   ['A', 'B', 'C'].forEach((name, index) => {
@@ -378,6 +400,9 @@ function createZoneGroups(THREE, parent, createLabel) {
     floorTint.rotation.x = -Math.PI / 2;
     floorTint.position.set(0, 0.004, startZ + zoneLength / 2);
     group.add(floorTint);
+    zoneTints[name] = floorTint;
+    floorTint.userData.iotZone = name;
+    zoneTargets.push(floorTint);
     const label = createLabel(`ZONA ${name}`, '#c4d7cb', 0.25);
     label.rotation.x = -Math.PI / 2;
     label.position.set(0, 0.035, startZ + 0.9);
@@ -386,7 +411,24 @@ function createZoneGroups(THREE, parent, createLabel) {
     zones[`zone${name}`] = group;
     parent.add(group);
   });
-  return zones;
+  return {
+    ...zones,
+    zoneTargets,
+    setZoneHighlight(zone) {
+      for (const [name, tint] of Object.entries(zoneTints)) {
+        tint.material.opacity = zone === 'GENERAL' ? 0.055 : (name === zone ? 0.12 : 0.025);
+      }
+    }
+  };
+}
+
+function setIoTDeviceMetadata(object, metadata) {
+  const device = { ...metadata };
+  object.userData.iotDevice = device;
+  object.traverse((child) => {
+    if (child.isMesh) child.userData.iotDevice = device;
+  });
+  return object;
 }
 
 function createEsp32Nodes(THREE, zoneGroups, createLabel) {
@@ -416,6 +458,21 @@ function createEsp32Nodes(THREE, zoneGroups, createLabel) {
     const label = createLabel(`ESP32-${zoneName}`, '#d8f0df', 0.18);
     label.position.set(0, 0.24, 0.16);
     node.add(label);
+    setIoTDeviceMetadata(node, {
+      id: `ESP32-${zoneName}`,
+      name: `ESP32-${zoneName}`,
+      type: 'controller',
+      zone: zoneName,
+      variable: null,
+      unit: null,
+      description: `Nodo controlador de la Zona ${zoneName}.`,
+      logicalRef: `zona-${zoneName.toLowerCase()}`,
+      associatedDeviceIds: [
+        `ENV-${zoneName}`,
+        `SOIL-C${firstSoilId(zoneName)}`,
+        `SOIL-C${firstSoilId(zoneName) + 1}`
+      ]
+    });
     zoneGroup.add(node);
     nodes.push(node);
   });
@@ -455,6 +512,16 @@ function createIoTStations(THREE, zoneGroups, createLabel) {
     const label = createLabel(`ESTACIÓN ${zoneName}`, '#e2eee6', 0.17);
     label.position.set(0, 0.35, 0.15);
     station.add(label);
+    setIoTDeviceMetadata(station, {
+      id: `ENV-${zoneName}`,
+      name: `Estación ambiental ${zoneName}`,
+      type: 'environmental_station',
+      zone: zoneName,
+      variable: ['temperatura_c', 'humedad_pct', 'iluminancia_lux', 'co2_ppm'],
+      unit: { temperatura_c: '°C', humedad_pct: '%', iluminancia_lux: 'lux', co2_ppm: 'ppm' },
+      description: `Estación ambiental asignada a la Zona ${zoneName}.`,
+      logicalRef: `zona-${zoneName.toLowerCase()}`
+    });
     zoneGroup.add(station);
     stations.push(station);
   });
@@ -489,6 +556,18 @@ function createSoilMoistureSensors(THREE, zoneGroups, bedCenters, createLabel) {
       label.position.set(0.03, 0.34, 0.15);
       sensor.add(label);
 
+      setIoTDeviceMetadata(sensor, {
+        id: `SOIL-C${bedIndex + 1}`,
+        name: `Sensor de humedad de suelo ${bedIndex + 1}`,
+        type: 'soil_moisture_sensor',
+        zone: zoneName,
+        variable: 'humedad_suelo_pct',
+        unit: '%',
+        description: `Sensor de humedad del suelo asignado al camellón C${bedIndex + 1}.`,
+        logicalRef: `camellon-C${bedIndex + 1}`,
+        camellon: `C${bedIndex + 1}`
+      });
+
       zoneGroup.add(sensor);
       sensors.push(sensor);
     }
@@ -515,6 +594,16 @@ function createPhSensor(THREE, parent, createLabel) {
   const label = createLabel('pH', '#e5f3e9', 0.18);
   label.position.set(0.08, 0.28, 0.16);
   sensor.add(label);
+  setIoTDeviceMetadata(sensor, {
+    id: 'PH-01',
+    name: 'Sensor de pH de riego',
+    type: 'ph_sensor',
+    zone: 'SERVICIO',
+    variable: 'ph',
+    unit: 'pH',
+    description: 'Sensor de pH del agua o solución de riego en el punto de servicio.',
+    logicalRef: 'agua-solucion-riego'
+  });
   serviceMount.add(sensor);
   return sensor;
 }
@@ -524,9 +613,6 @@ function createIoTArchitecture(THREE, parent, zones, bedCenters, createLabel) {
   const environmentalStations = createIoTStations(THREE, zones, createLabel);
   const soilMoistureSensors = createSoilMoistureSensors(THREE, zones, bedCenters, createLabel);
   const phSensor = createPhSensor(THREE, parent, createLabel);
-  const devices = [];
-  const stateById = {};
-  const pickTargets = [];
   const pickMaterial = new THREE.MeshBasicMaterial({
     transparent: true,
     opacity: 0,
@@ -534,80 +620,41 @@ function createIoTArchitecture(THREE, parent, zones, bedCenters, createLabel) {
     depthWrite: false,
     side: THREE.DoubleSide
   });
-
-  function registerDevice(object, metadata, state, pickGeometry) {
-    const device = { ...metadata };
-    object.userData.iotDevice = device;
-    const pickTarget = new THREE.Mesh(pickGeometry, pickMaterial);
-    pickTarget.name = `iot-pick-${device.id}`;
-    pickTarget.userData.iotPickTarget = true;
-    object.add(pickTarget);
-    devices.push({ ...device, object });
-    pickTargets.push(pickTarget);
-    stateById[device.id] = {
-      id: device.id,
-      type: device.type,
-      zone: device.zone,
-      status: state.status,
-      source: 'SIMULADO',
-      ...state.values
-    };
-  }
-
-  esp32Nodes.forEach((object, index) => {
-    const zone = ['A', 'B', 'C'][index];
-    registerDevice(object, { id: `ESP32-${zone}`, type: 'esp32', zone }, {
-      status: 'NORMAL',
-      values: { connection: 'CONECTADO', role: `Control local de la zona ${zone}` }
-    }, new THREE.BoxGeometry(0.62, 0.62, 0.48));
+  const selectableDevices = [
+    ...esp32Nodes,
+    ...environmentalStations,
+    ...soilMoistureSensors,
+    phSensor
+  ];
+  const pickTargets = selectableDevices.map((device) => {
+    const metadata = device.userData.iotDevice;
+    const geometry = metadata.type === 'controller'
+      ? new THREE.BoxGeometry(0.62, 0.62, 0.48)
+      : metadata.type === 'environmental_station'
+        ? new THREE.SphereGeometry(0.38, 8, 6)
+        : metadata.type === 'soil_moisture_sensor'
+          ? new THREE.SphereGeometry(0.28, 8, 6)
+          : new THREE.SphereGeometry(0.3, 8, 6);
+    const target = new THREE.Mesh(geometry, pickMaterial);
+    target.name = `iot-pick-${metadata.id}`;
+    target.userData.iotDevice = metadata;
+    target.userData.iotRoot = device;
+    device.add(target);
+    return target;
   });
-
-  environmentalStations.forEach((object, index) => {
-    const zone = ['A', 'B', 'C'][index];
-    const stationReadings = [
-      { temperatureC: 24.8, relativeHumidityPct: 68, illuminanceLux: 18400, co2Ppm: 620 },
-      { temperatureC: 29.6, relativeHumidityPct: 59, illuminanceLux: 22100, co2Ppm: 710 },
-      { temperatureC: 31.2, relativeHumidityPct: 54, illuminanceLux: 19700, co2Ppm: 835 }
-    ][index];
-    registerDevice(object, { id: `ENV-${zone}`, type: 'environmental-station', zone }, {
-      status: index === 2 ? 'ADVERTENCIA' : 'NORMAL',
-      values: stationReadings
-    }, new THREE.SphereGeometry(0.38, 8, 6));
-  });
-
-  soilMoistureSensors.forEach((object, index) => {
-    const bedNumber = index + 1;
-    const zone = ['A', 'A', 'B', 'B', 'C', 'C'][index];
-    const moisture = [58, 54, 61, 47, 28, null][index];
-    registerDevice(object, {
-      id: `SOIL-C${bedNumber}`,
-      type: 'soil-moisture',
-      zone,
-      bed: `C${bedNumber}`
-    }, {
-      status: moisture === null ? 'SIN DATOS' : moisture < 30 ? 'CRÍTICO' : moisture < 45 ? 'ADVERTENCIA' : 'NORMAL',
-      values: { soilMoisturePct: moisture }
-    }, new THREE.SphereGeometry(0.26, 8, 6));
-  });
-
-  registerDevice(phSensor, {
-    id: 'PH-01',
-    type: 'ph-sensor',
-    zone: 'SERVICIO'
-  }, {
-    status: 'NORMAL',
-    values: { ph: 6.2, location: 'Punto de servicio del riego' }
-  }, new THREE.SphereGeometry(0.28, 8, 6));
-
   return {
     zones,
     esp32Nodes,
     environmentalStations,
     soilMoistureSensors,
     phSensor,
-    devices,
-    stateById,
-    pickTargets,
+    selectableDevices,
+  pickTargets,
+    summaryByZone: {
+      A: selectableDevices.filter((device) => device.userData.iotDevice.zone === 'A'),
+      B: selectableDevices.filter((device) => device.userData.iotDevice.zone === 'B'),
+      C: selectableDevices.filter((device) => device.userData.iotDevice.zone === 'C')
+    },
     counts: {
       esp32: esp32Nodes.length,
       environmentalStations: environmentalStations.length,
@@ -878,10 +925,19 @@ export function createGreenhouseModel(THREE, createLabel) {
   createAntechamber(THREE, group, createLabel);
   const zones = createZoneGroups(THREE, group, createLabel);
   const irrigationService = createIrrigationService(THREE, group, createLabel);
+  const serviceHighlight = new THREE.Mesh(
+    new THREE.TorusGeometry(1.45, 0.028, 8, 64),
+    new THREE.MeshBasicMaterial({ color: 0x6be6d0, transparent: true, opacity: 0.9, depthWrite: false })
+  );
+  serviceHighlight.rotation.x = -Math.PI / 2;
+  serviceHighlight.position.set(IRRIGATION.serviceCenterX, 0.08, IRRIGATION.serviceCenterZ);
+  serviceHighlight.visible = false;
+  group.add(serviceHighlight);
   const manifold = createIrrigationManifold(THREE, group, beds.centers, irrigationService, createLabel);
   const emitters = createEmitters(THREE, group, beds.centers);
   const updatePulses = createWaterPulses(THREE, group, beds.centers);
   const iotArchitecture = createIoTArchitecture(THREE, group, zones, beds.centers, createLabel);
+  const bedSelection = createBedSelection(THREE, group, beds.meshes);
   const irrigation = {
     serviceGroup: irrigationService.group,
     manifoldGroup: manifold.group,
@@ -896,6 +952,12 @@ export function createGreenhouseModel(THREE, createLabel) {
   group.userData = { dimensions: { ...GREENHOUSE }, bedCenters: beds.centers, irrigation, ventilation: {
     group: ventilation.group,
     updateVisualState: (active, elapsed) => updateVentilationVisualState(ventilation, active, elapsed)
-  }, iotArchitecture, ...zones };
+  }, iotArchitecture, setBedHighlight: bedSelection.setBedHighlight, setServiceHighlight: (active) => {
+    serviceHighlight.visible = active;
+  }, ...zones };
   return group;
+}
+
+function firstSoilId(zoneName) {
+  return (['A', 'B', 'C'].indexOf(zoneName) * 2) + 1;
 }
