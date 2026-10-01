@@ -75,9 +75,9 @@
             position: fixed;
             top: 70px;
             right: 20px;
-            z-index: 10;
-            width: 360px;
-            max-height: calc(100vh - 160px);
+            z-index: 30;
+            width: min(360px, calc(100vw - 72px));
+            max-height: calc(100vh - 180px);
             overflow-y: auto;
             padding: 28px 24px;
             border: 1px solid var(--border);
@@ -85,10 +85,13 @@
             background: var(--card);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
-            transition: opacity 0.4s, transform 0.4s;
+            transition: opacity 0.28s ease, transform 0.28s ease;
+            pointer-events: none;
         }
 
-        .info-panel.hidden { opacity: 0; transform: translateX(30px); pointer-events: none; }
+        .info-panel.hidden { opacity: 0; transform: translateX(calc(100% + 28px)); pointer-events: none; }
+        .info-panel:not(.hidden) { pointer-events: none; }
+        .info-panel .iot-device-close { pointer-events: auto; }
 
         .info-panel .layer-badge {
             display: inline-flex;
@@ -113,7 +116,7 @@
             top: 68px;
             left: 20px;
             width: min(390px, calc(100vw - 40px));
-            z-index: 10;
+            z-index: 30;
             padding: 14px;
             padding: 14px;
             border: 1px solid var(--border);
@@ -123,6 +126,84 @@
             -webkit-backdrop-filter: blur(18px);
             max-height: calc(100vh - 110px);
             overflow-y: auto;
+            transition: transform 0.28s ease, opacity 0.28s ease;
+        }
+
+        .monitor-panel.drawer-closed,
+        .layer-drawer.drawer-closed {
+            opacity: 0;
+            transform: translateX(calc(-100% - 18px));
+            pointer-events: none;
+        }
+
+        .layer-drawer {
+            position: fixed;
+            top: 68px;
+            left: 20px;
+            z-index: 30;
+            width: min(390px, calc(100vw - 72px));
+            max-height: calc(100vh - 180px);
+            overflow-y: auto;
+            padding: 18px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--card);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            transition: transform 0.28s ease, opacity 0.28s ease;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
+        }
+
+        .monitor-panel,
+        .info-panel { box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32); }
+
+        .iot-device-card { z-index: 50; }
+
+        .monitor-panel .iot-device-close { pointer-events: auto; }
+
+        .side-drawer-tab {
+            position: fixed;
+            top: 88px;
+            z-index: 42;
+            display: grid;
+            place-items: center;
+            width: 34px;
+            min-height: 88px;
+            padding: 8px 5px;
+            border: 1px solid var(--border);
+            background: rgba(12, 20, 12, 0.9);
+            color: var(--fg);
+            font: 600 10px 'Space Grotesk', sans-serif;
+            cursor: pointer;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+        }
+
+        .side-drawer-tab span { writing-mode: vertical-rl; }
+        .side-drawer-tab-left { left: 0; border-radius: 0 8px 8px 0; }
+        .side-drawer-tab-right { right: 0; border-radius: 8px 0 0 8px; }
+        .side-drawer-tab-left-layer { top: 190px; }
+        .side-drawer-tab[aria-expanded="true"] { color: #baf4ce; border-color: rgba(46, 204, 113, 0.45); }
+        }
+
+        @media (min-width: 769px) and (max-width: 1100px) {
+            .monitor-panel {
+                left: 16px;
+                width: min(260px, calc(100vw - 32px));
+                max-height: calc(100vh - 190px);
+                padding: 12px;
+            }
+
+            .info-panel {
+                right: 16px;
+                width: min(300px, calc(100vw - 32px));
+                max-height: calc(100vh - 190px);
+                padding: 20px 18px;
+            }
+
+            .iot-device-card {
+                right: 16px;
+                width: min(300px, calc(100vw - 32px));
+            }
         }
 
         .monitor-heading {
@@ -172,7 +253,7 @@
             position: fixed;
             right: 20px;
             bottom: 100px;
-            z-index: 30;
+            z-index: 50;
             width: min(320px, calc(100vw - 32px));
             max-height: min(360px, calc(100vh - 130px));
             overflow-y: auto;
@@ -182,6 +263,7 @@
             background: rgba(12, 20, 12, 0.94);
             color: var(--fg);
             backdrop-filter: blur(18px);
+            pointer-events: none;
         }
 
         .iot-device-card[hidden] {
@@ -216,6 +298,7 @@
             color: var(--fg);
             font-size: 18px;
             cursor: pointer;
+            pointer-events: auto;
         }
 
         .iot-device-fields {
@@ -361,6 +444,11 @@
         .mode-button.active {
             background: rgba(46, 204, 113, 0.18);
             color: #baf4ce;
+        }
+
+        .mode-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.45;
         }
 
         .iot-inspector {
@@ -576,7 +664,7 @@
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            z-index: 10;
+            z-index: 45;
             display: flex;
             gap: 6px;
             padding: 6px;
@@ -670,19 +758,23 @@
 
         /* Responsive */
         @media (max-width: 768px) {
+            .debug-hud { display: none; }
+
             .monitor-panel {
                 top: 58px;
                 left: 10px;
                 width: min(350px, calc(100vw - 20px));
                 padding: 10px;
-                max-height: calc(100vh - 220px);
+                max-height: 42vh;
             }
 
             .iot-device-card {
+                top: calc(58px + 42vh + 8px);
                 right: 10px;
-                bottom: 155px;
-                width: min(300px, calc(100vw - 20px));
-                max-height: 42vh;
+                bottom: 90px;
+                left: 10px;
+                width: auto;
+                max-height: calc(58vh - 120px);
             }
 
             .sensor-grid {
@@ -703,12 +795,13 @@
             }
 
             .info-panel {
-                width: calc(100% - 32px);
-                right: 16px;
-                top: auto;
+                top: calc(58px + 42vh + 8px);
                 bottom: 90px;
-                max-height: 35vh;
-                padding: 20px 18px;
+                left: 10px;
+                right: 10px;
+                width: auto;
+                max-height: calc(58vh - 120px);
+                padding: 12px 14px;
             }
 
             .nav-btn {
@@ -729,13 +822,12 @@
             }
 
             .sim-controls {
-                right: 10px;
-                bottom: 94px !important;
-                left: 10px;
-                max-width: calc(100vw - 20px);
+                width: 100%;
+                max-width: none;
                 flex-wrap: wrap;
                 justify-content: center;
                 gap: 6px;
+                margin-top: 10px;
             }
         }
 
@@ -784,21 +876,44 @@
         <span style="font-size:12px; color:var(--muted); margin-left:4px;">/ Invernadero Inteligente</span>
     </header>
 
+    <button class="side-drawer-tab side-drawer-tab-left" id="dashboardDrawerToggle" type="button" aria-controls="monitorPanel" aria-expanded="false">
+        <span>Dashboard</span>
+    </button>
+    <button class="side-drawer-tab side-drawer-tab-left side-drawer-tab-left-layer" id="layerDrawerToggle" type="button" aria-controls="layerInfoDrawer" aria-expanded="false">
+        <span>Capas</span>
+    </button>
+    <button class="side-drawer-tab side-drawer-tab-right" id="infoDrawerToggle" type="button" aria-controls="infoPanel" aria-expanded="false">
+        <span>Información</span>
+    </button>
+
     <!-- Panel de información -->
     <aside class="info-panel hidden" id="infoPanel">
+        <button class="iot-device-close" id="infoPanelClose" type="button" aria-label="Cerrar información" title="Cerrar información">×</button>
         <div class="layer-badge" id="layerBadge">CAPA 1</div>
         <h2 id="layerTitle">Titulo</h2>
         <p id="layerDesc">Descripción</p>
         <ul class="elements-list" id="layerElements"></ul>
     </aside>
 
-    <section class="monitor-panel" aria-label="Monitoreo INVERNIA">
+    <aside class="layer-drawer drawer-closed" id="layerInfoDrawer" aria-label="Información de capa">
+        <header class="monitor-heading">
+            <h2 id="layerDrawerTitle">CAPA IoT</h2>
+            <button class="iot-device-close" id="layerDrawerClose" type="button" aria-label="Cerrar información de capa" title="Cerrar">×</button>
+        </header>
+        <div class="layer-badge" id="layerDrawerBadge">CAPA 1</div>
+        <h2 id="layerDrawerHeading">Información de capa</h2>
+        <p id="layerDrawerDesc"></p>
+        <ul class="elements-list" id="layerDrawerElements"></ul>
+    </aside>
+
+    <section class="monitor-panel drawer-closed" id="monitorPanel" aria-label="Monitoreo INVERNIA">
         <div class="monitor-heading">
             <h2>INVERNIA · MONITOREO</h2>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">
                 <span id="monitorSource">FUENTE: SIMULACIÓN</span>
                 <span id="systemStatus" class="system-status">SISTEMA ONLINE</span>
             </div>
+            <button class="iot-device-close" id="dashboardDrawerClose" type="button" aria-label="Cerrar dashboard" title="Cerrar dashboard">×</button>
         </div>
         <div class="zone-selector" role="group" aria-label="Sector de muestreo">
             <button class="zone-button active" type="button" data-zone="GENERAL" aria-pressed="true">GENERAL</button>
@@ -991,8 +1106,8 @@
            CONFIGURACIÓN DE CÁMARA POR CAPA
         ============================== */
         const cameraViews = {
-            overview: { pos: [24, 19, 35], target: [0, 7, 0] },
-            physical: { pos: [21, 16, 29], target: [0, 1.8, 0] },
+            overview: { pos: [22, 20, 36], target: [-2, 1.8, 0] },
+            physical: { pos: [19, 16, 29], target: [-2, 1.8, 0] },
             connectivity: { pos: [12, 8.5, 12], target: [0, 8, 0] },
             platform: { pos: [14, 15, 14], target: [0, 14.5, 0] },
             application: { pos: [12, 21.5, 12], target: [0, 21, 0] },
@@ -1847,6 +1962,14 @@
         const layerDesc = document.getElementById('layerDesc');
         const layerElements = document.getElementById('layerElements');
         const navBtns = document.querySelectorAll('.nav-btn');
+        const monitorPanel = document.getElementById('monitorPanel');
+        const layerInfoDrawer = document.getElementById('layerInfoDrawer');
+        const dashboardDrawerToggle = document.getElementById('dashboardDrawerToggle');
+        const layerDrawerToggle = document.getElementById('layerDrawerToggle');
+        const infoDrawerToggle = document.getElementById('infoDrawerToggle');
+        let leftPanelView = null;
+        let leftPanelOpen = false;
+        let rightPanelOpen = false;
 
         function showLayerInfo(layerKey) {
             const data = layerData[layerKey];
@@ -1866,8 +1989,75 @@
                 layerElements.appendChild(li);
             });
 
-            infoPanel.classList.remove('hidden');
+            document.getElementById('layerDrawerTitle').textContent = data.badge;
+            document.getElementById('layerDrawerBadge').textContent = data.badge;
+            document.getElementById('layerDrawerBadge').style.color = data.badgeColor;
+            document.getElementById('layerDrawerBadge').style.background = data.badgeBg;
+            document.getElementById('layerDrawerBadge').style.border = `1px solid ${data.badgeColor}33`;
+            document.getElementById('layerDrawerHeading').textContent = data.title;
+            document.getElementById('layerDrawerDesc').textContent = data.desc;
+            const drawerElements = document.getElementById('layerDrawerElements');
+            drawerElements.replaceChildren(...[...layerElements.children].map((item) => item.cloneNode(true)));
+            layerBadge.style.color = data.badgeColor;
+            layerBadge.style.background = data.badgeBg;
+            layerBadge.style.border = `1px solid ${data.badgeColor}33`;
         }
+
+        function updateDrawerButtons() {
+            dashboardDrawerToggle.setAttribute('aria-expanded', String(leftPanelOpen && leftPanelView === 'dashboard'));
+            layerDrawerToggle.setAttribute('aria-expanded', String(leftPanelOpen && leftPanelView === 'layer'));
+            infoDrawerToggle.setAttribute('aria-expanded', String(rightPanelOpen));
+            monitorPanel.setAttribute('aria-hidden', String(!(leftPanelOpen && leftPanelView === 'dashboard')));
+            layerInfoDrawer.setAttribute('aria-hidden', String(!(leftPanelOpen && leftPanelView === 'layer')));
+            infoPanel.setAttribute('aria-hidden', String(!rightPanelOpen));
+        }
+
+        function closeLeftDrawer() {
+            leftPanelOpen = false;
+            monitorPanel.classList.add('drawer-closed');
+            layerInfoDrawer.classList.add('drawer-closed');
+            updateDrawerButtons();
+        }
+
+        function openLeftDrawer(view) {
+            rightPanelOpen = false;
+            infoPanel.classList.add('hidden');
+            leftPanelView = view;
+            leftPanelOpen = true;
+            monitorPanel.classList.toggle('drawer-closed', view !== 'dashboard');
+            layerInfoDrawer.classList.toggle('drawer-closed', view !== 'layer');
+            updateDrawerButtons();
+        }
+
+        function closeRightDrawer() {
+            rightPanelOpen = false;
+            infoPanel.classList.add('hidden');
+            updateDrawerButtons();
+        }
+
+        function openRightDrawer() {
+            closeLeftDrawer();
+            rightPanelOpen = true;
+            showLayerInfo(currentLayer || 'overview');
+            infoPanel.classList.remove('hidden');
+            updateDrawerButtons();
+        }
+
+        dashboardDrawerToggle.addEventListener('click', () => {
+            if (leftPanelOpen && leftPanelView === 'dashboard') closeLeftDrawer();
+            else openLeftDrawer('dashboard');
+        });
+        layerDrawerToggle.addEventListener('click', () => {
+            if (leftPanelOpen && leftPanelView === 'layer') closeLeftDrawer();
+            else openLeftDrawer('layer');
+        });
+        infoDrawerToggle.addEventListener('click', () => {
+            if (rightPanelOpen) closeRightDrawer();
+            else openRightDrawer();
+        });
+        document.getElementById('dashboardDrawerClose').addEventListener('click', closeLeftDrawer);
+        document.getElementById('layerDrawerClose').addEventListener('click', closeLeftDrawer);
+        document.getElementById('infoPanelClose').addEventListener('click', closeRightDrawer);
 
         function setActiveButton(layerKey) {
             navBtns.forEach(btn => {
@@ -1876,20 +2066,24 @@
         }
 
         let currentLayer = 'overview';
+        showLayerInfo(currentLayer);
+        updateDrawerButtons();
 
         navBtns.forEach(btn => {
             btn.addEventListener('click', () => {
                 const layer = btn.dataset.layer;
-                if (layer === currentLayer && !tweenActive) return;
+                if (layer === currentLayer && !tweenActive) {
+                    openLeftDrawer('layer');
+                    return;
+                }
+                if (selectedIoTDevice) clearIoTSelection();
                 currentLayer = layer;
                 setActiveButton(layer);
                 moveCameraTo(layer);
                 showLayerInfo(layer);
+                openLeftDrawer('layer');
             });
         });
-
-        /* Mostrar vista general al inicio */
-        showLayerInfo('overview');
 
         /* ==============================
            REDIMENSIONAR
@@ -1920,6 +2114,7 @@
 
         // Debug HUD (para demo): muestra el estado que está leyendo el frontend
         const debugHud = document.createElement('div');
+        debugHud.className = 'debug-hud';
 
         // Sensores y actuadores (Etapa 1)
         let backendSensors = { temperatura_c: 27, humedad_pct: 68 };
@@ -1933,9 +2128,10 @@
 
 
         debugHud.style.position = 'fixed';
-        debugHud.style.left = '20px';
-        debugHud.style.top = '70px';
-        debugHud.style.zIndex = '30';
+        debugHud.style.left = 'auto';
+        debugHud.style.right = '20px';
+        debugHud.style.top = '16px';
+        debugHud.style.zIndex = '12';
         debugHud.style.background = 'rgba(12,20,12,0.85)';
         debugHud.style.border = '1px solid rgba(255,255,255,0.12)';
         debugHud.style.borderRadius = '12px';
@@ -2023,12 +2219,18 @@
             const systemStatus = document.getElementById('systemStatus');
             systemStatus.textContent = online ? 'SISTEMA ONLINE' : 'SISTEMA OFFLINE';
             systemStatus.classList.toggle('offline', !online);
+            systemStatus.removeAttribute('title');
+            for (const id of ['modeManual', 'modeAutomatic']) {
+                const button = document.getElementById(id);
+                button.disabled = !online;
+                button.title = online ? '' : 'Selecciona Simulación local para probar los controles sin backend';
+            }
             for (const id of ['irrigationAction', 'ventilationAction']) {
                 const button = document.getElementById(id);
-                button.disabled = automatic;
-                button.textContent = automatic ? 'Control automático' : (id === 'irrigationAction'
+                button.disabled = automatic || !online;
+                button.textContent = !online ? 'Backend desconectado' : (automatic ? 'Control automático' : (id === 'irrigationAction'
                     ? (irrigationOn ? 'Apagar riego' : 'Encender riego')
-                    : (ventilationOn ? 'Apagar ventilación' : 'Encender ventilación'));
+                    : (ventilationOn ? 'Apagar ventilación' : 'Encender ventilación')));
             }
         }
 
@@ -2165,6 +2367,7 @@
             greenhouseModel.userData.setServiceHighlight(false);
             highlightDashboardVariables([]);
             document.getElementById('iotDeviceCard').hidden = true;
+            if (rightPanelOpen) infoPanel.classList.remove('hidden');
         }
 
         function positionIoTMarker(marker, deviceRoot) {
@@ -2178,7 +2381,9 @@
         }
 
         function selectIoTDevice(deviceRoot) {
+            closeRightDrawer();
             selectedIoTDevice = deviceRoot;
+            infoPanel.classList.add('hidden');
             iotSelectionMarkers.forEach((marker) => { marker.visible = false; });
             const metadata = deviceRoot.userData.iotDevice;
             const associatedRoots = (metadata.associatedDeviceIds || [])
@@ -2256,13 +2461,12 @@
         // ==============================
         const simControls = document.createElement('div');
         simControls.className = 'sim-controls';
-        simControls.style.position = 'fixed';
-        simControls.style.left = '20px';
-        simControls.style.bottom = '140px';
-        simControls.style.zIndex = '20';
         simControls.style.display = 'flex';
         simControls.style.alignItems = 'center';
         simControls.style.gap = '10px';
+        simControls.style.flexWrap = 'wrap';
+        simControls.style.width = '100%';
+        simControls.style.marginTop = '10px';
         simControls.style.padding = '10px 12px';
         simControls.style.background = 'rgba(12,20,12,0.85)';
         simControls.style.border = '1px solid rgba(255,255,255,0.12)';
@@ -2314,7 +2518,7 @@
         simClockText.textContent = 'Hora: --:--';
         simControls.appendChild(simClockText);
 
-        document.body.appendChild(simControls);
+        monitorPanel.insertBefore(simControls, monitorPanel.querySelector('.sensor-grid'));
 
         // ==============================
         // Motor local de “hora virtual + sol” para TEMP/HUM/RIEGO
@@ -2612,6 +2816,10 @@
                 await obtenerEstado();
             } catch (error) {
                 console.error('[Dashboard] No se pudo aplicar la acción.');
+                const systemStatus = document.getElementById('systemStatus');
+                systemStatus.textContent = 'ACCIÓN NO APLICADA';
+                systemStatus.classList.add('offline');
+                systemStatus.title = error instanceof Error ? error.message : 'No se pudo aplicar la acción';
             }
         }
 
