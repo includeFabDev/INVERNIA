@@ -1181,6 +1181,213 @@
         scene.add(lightApplication);
 
         /* ==============================
+           CAPA AMBIENTAL VISUAL
+           Consume el estado existente del motor local y no lo reemplaza.
+        ============================== */
+        function createEnvironmentSystem(scene, greenhouseModel) {
+            const skyDome = new THREE.Mesh(
+                new THREE.SphereGeometry(120, 32, 32),
+                new THREE.MeshBasicMaterial({ color: 0x07131d, side: THREE.BackSide })
+            );
+            scene.add(skyDome);
+
+            const sunGroup = new THREE.Group();
+            const sun = new THREE.Mesh(
+                new THREE.SphereGeometry(1.8, 22, 22),
+                new THREE.MeshBasicMaterial({ color: 0xffd18a })
+            );
+            const sunGlow = new THREE.Mesh(
+                new THREE.SphereGeometry(3.2, 22, 22),
+                new THREE.MeshBasicMaterial({ color: 0xffd18a, transparent: true, opacity: 0.16 })
+            );
+            sunGroup.add(sun, sunGlow);
+            scene.add(sunGroup);
+
+            const moonGroup = new THREE.Group();
+            const moon = new THREE.Mesh(
+                new THREE.SphereGeometry(1.2, 20, 20),
+                new THREE.MeshBasicMaterial({ color: 0xeff3ff })
+            );
+            const moonGlow = new THREE.Mesh(
+                new THREE.SphereGeometry(1.9, 20, 20),
+                new THREE.MeshBasicMaterial({ color: 0xeff3ff, transparent: true, opacity: 0.1 })
+            );
+            moonGroup.add(moon, moonGlow);
+            scene.add(moonGroup);
+
+            const starPositions = new Float32Array(240 * 3);
+            for (let i = 0; i < starPositions.length; i += 3) {
+                starPositions[i] = (Math.random() - 0.5) * 90;
+                starPositions[i + 1] = 12 + Math.random() * 42;
+                starPositions[i + 2] = (Math.random() - 0.5) * 90;
+            }
+            const starGeo = new THREE.BufferGeometry();
+            starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+            const stars = new THREE.Points(
+                starGeo,
+                new THREE.PointsMaterial({ color: 0xf5f0d9, size: 0.42, transparent: true, opacity: 0.9 })
+            );
+            stars.visible = false;
+            scene.add(stars);
+
+            const cloudGroup = new THREE.Group();
+            const clouds = [];
+            for (let i = 0; i < 8; i++) {
+                const cloud = new THREE.Group();
+                const puffMaterial = new THREE.MeshBasicMaterial({ color: 0xdfeaf9, transparent: true, opacity: 0.28 });
+                const puffPositions = [
+                    [-1.0, 0, 0], [0.0, 0.35, 0.1], [1.2, 0.1, 0.2], [2.2, 0.0, 0.0], [-2.0, 0.2, -0.1]
+                ];
+                puffPositions.forEach(([x, y, z], puffIndex) => {
+                    const puff = new THREE.Mesh(new THREE.SphereGeometry(1 + (puffIndex % 2) * 0.2, 16, 16), puffMaterial.clone());
+                    puff.position.set(x, y, z);
+                    cloud.add(puff);
+                });
+                cloud.position.set((Math.random() - 0.5) * 26, 10 + Math.random() * 9, -12 - Math.random() * 18);
+                cloud.userData.speed = 0.08 + Math.random() * 0.12;
+                cloud.scale.setScalar(0.7 + Math.random() * 0.8);
+                cloudGroup.add(cloud);
+                clouds.push(cloud);
+            }
+            scene.add(cloudGroup);
+
+            const rainCount = 650;
+            const rainPositions = new Float32Array(rainCount * 3);
+            for (let i = 0; i < rainCount; i++) {
+                const index = i * 3;
+                rainPositions[index] = (Math.random() - 0.5) * 28;
+                rainPositions[index + 1] = 2 + Math.random() * 18;
+                rainPositions[index + 2] = (Math.random() - 0.5) * 26;
+            }
+            const rainGeo = new THREE.BufferGeometry();
+            rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPositions, 3));
+            const rainMaterial = new THREE.PointsMaterial({
+                color: 0xa8d2ff,
+                size: 0.11,
+                transparent: true,
+                opacity: 0.8,
+                depthWrite: false
+            });
+            const rain = new THREE.Points(rainGeo, rainMaterial);
+            rain.visible = false;
+            scene.add(rain);
+
+            function updateSoilVisuals(soilMoisture) {
+                const beds = greenhouseModel.userData?.bedMeshes || [];
+                if (!beds.length) return;
+                const dryColor = new THREE.Color(0xc6a172);
+                const wetColor = new THREE.Color(0x382317);
+                const soilValue = clamp((Number(soilMoisture) || 0) / 100, 0, 1);
+                const targetColor = dryColor.clone().lerp(wetColor, soilValue);
+                beds.forEach((bed) => {
+                    if (bed.material && bed.material.color) {
+                        bed.material.color.copy(targetColor);
+                        bed.material.emissive = bed.material.emissive || new THREE.Color(0x000000);
+                        bed.material.emissiveIntensity = 0.08 + (1 - soilValue) * 0.08;
+                    }
+                });
+            }
+
+            function updateEnvironmentVisuals({ simulatedMinutes, scenario, temperature, humidity, soilMoisture, lux, irrigationOn, ventilationOn, dt }) {
+                const minutes = Number(simulatedMinutes) || 0;
+                const phase = (minutes % 1440) / 1440;
+                const solarAngle = phase * Math.PI * 2 - Math.PI / 2;
+                const daylightFactor = clamp((Math.sin(solarAngle) + 1) / 2, 0, 1);
+                const nightFactor = 1 - daylightFactor;
+                const rainScenario = scenario === 'LLUVIA';
+                const overcastScenario = scenario === 'DIA_NUBLADO';
+                const coldScenario = scenario === 'FRIO_INTENSO';
+                const heatScenario = scenario === 'CALOR_EXTREMO';
+
+                const dayColor = new THREE.Color(0x8cc7ff);
+                const nightColor = new THREE.Color(0x050d1a);
+                const dawnColor = new THREE.Color(0xf5b56f);
+                const duskColor = new THREE.Color(0xff8f6a);
+                const rainColor = new THREE.Color(0x536f7f);
+                const cloudTint = new THREE.Color(0xb9c7d7);
+                let skyBase = nightColor.clone().lerp(dayColor, daylightFactor);
+                skyBase.lerp(dawnColor, clamp((Math.sin(solarAngle + 0.8) + 1) / 2, 0, 1) * (1 - daylightFactor) * 0.7);
+                skyBase.lerp(duskColor, clamp((Math.sin(solarAngle - 0.7) + 1) / 2, 0, 1) * (1 - daylightFactor) * 0.7);
+                if (rainScenario) skyBase.lerp(rainColor, 0.75);
+                if (overcastScenario) skyBase.lerp(cloudTint, 0.45);
+                if (coldScenario) skyBase.lerp(new THREE.Color(0x8fa8c6), 0.28);
+                if (heatScenario && daylightFactor > 0.2) skyBase.lerp(new THREE.Color(0xffb157), 0.22);
+
+                skyDome.material.color.copy(skyBase);
+                scene.background = skyBase.clone();
+                if (scene.fog) {
+                    scene.fog.color.copy(skyBase);
+                    scene.fog.density = rainScenario ? 0.02 : overcastScenario ? 0.015 : 0.012;
+                }
+
+                const sunVisibility = daylightFactor > 0.08 && !rainScenario;
+                sunGroup.visible = sunVisibility;
+                moonGroup.visible = nightFactor > 0.48 && !rainScenario && !overcastScenario;
+                stars.visible = nightFactor > 0.52 && !rainScenario && !overcastScenario;
+
+                const sunDistance = 34;
+                const sunX = Math.cos(solarAngle) * sunDistance;
+                const sunY = Math.max(-2, Math.sin(solarAngle) * 18 + 11);
+                sun.position.set(sunX, sunY, -22 + Math.cos(solarAngle) * 8);
+                sun.material.opacity = sunVisibility ? 1 : 0;
+                sunGlow.material.opacity = sunVisibility ? (0.12 + daylightFactor * 0.16) : 0;
+                sunGroup.position.set(0, 0, 0);
+
+                const moonPhase = solarAngle + Math.PI;
+                const moonX = Math.cos(moonPhase) * 30;
+                const moonY = Math.sin(moonPhase) * 11 + 11;
+                moonGroup.position.set(moonX, moonY, 20);
+
+                const cloudOpacityTarget = rainScenario ? 0.9 : overcastScenario ? 0.72 : heatScenario ? 0.25 : coldScenario ? 0.52 : 0.28;
+                const rainVisible = rainScenario;
+                rain.visible = rainVisible;
+                if (rainVisible) {
+                    const positions = rain.geometry.attributes.position.array;
+                    for (let i = 0; i < positions.length; i += 3) {
+                        positions[i + 1] -= (dt || 0.016) * 18;
+                        if (positions[i + 1] < 0) {
+                            positions[i + 1] = 16 + Math.random() * 10;
+                            positions[i] = (Math.random() - 0.5) * 26;
+                            positions[i + 2] = (Math.random() - 0.5) * 24;
+                        }
+                    }
+                    rain.geometry.attributes.position.needsUpdate = true;
+                }
+
+                clouds.forEach((cloud, index) => {
+                    cloud.position.x += (cloud.userData.speed || 0.1) * (dt || 0.016) * 2;
+                    if (cloud.position.x > 24) cloud.position.x = -24;
+                    cloud.position.y += Math.sin((minutes * 0.04) + index) * 0.0025;
+                    cloud.traverse((child) => {
+                        if (child.material && child.material.opacity !== undefined) {
+                            child.material.opacity = cloudOpacityTarget * (0.55 + (index % 3) * 0.12);
+                        }
+                    });
+                });
+
+                const ambient = 0.35 + daylightFactor * 1.15 + (ventilationOn ? 0.15 : 0) - (rainScenario ? 0.22 : 0);
+                const dirPower = 0.7 + daylightFactor * 1.3 + (heatScenario ? 0.15 : 0) - (rainScenario ? 0.45 : 0);
+                ambientLight.intensity = ambient * (coldScenario ? 0.75 : 1);
+                hemisphereLight.intensity = 0.38 + daylightFactor * 0.9;
+                dirLight.intensity = dirPower;
+                dirLight.position.set(-14 + Math.cos(solarAngle) * 10, 15 + Math.sin(solarAngle) * 10, 16);
+                dirLight.color.setHSL(coldScenario ? 0.58 : heatScenario ? 0.08 : dayColor.getHSL({ h: 0, s: 0, l: 0 }).h, 0.6, 0.72);
+
+                if (lux > 0) {
+                    const glow = clamp((lux / 20000) * (heatScenario ? 1.6 : 1.0), 0.1, 1.8);
+                    sunGlow.material.opacity = glow * (rainScenario ? 0.2 : 0.42);
+                    if (sunGroup.visible) sun.scale.setScalar(1 + glow * 0.25);
+                }
+
+                if (greenhouseModel?.userData && greenhouseModel.userData.bedMeshes) {
+                    updateSoilVisuals(soilMoisture);
+                }
+            }
+
+            return { skyDome, sunGroup, moonGroup, stars, rain, clouds, updateEnvironmentVisuals };
+        }
+
+        /* ==============================
            UTILIDADES
         ============================== */
         const eps = 0.001;
@@ -1590,6 +1797,7 @@
             return marker;
         });
         scene.add(physicalGroup);
+        const environment = createEnvironmentSystem(scene, greenhouseModel);
 
         /* ==============================
            CAPA CONECTIVIDAD — WI-FI
@@ -2504,30 +2712,95 @@
         simSpeedSelect.style.borderRadius = '8px';
         simSpeedSelect.style.padding = '8px 10px';
         simSpeedSelect.innerHTML = `
-          <option value="0">Real time (x1)</option>
-          <option value="1">x1</option>
-          <option value="2">x2</option>
-          <option value="5" selected>x5</option>
+          <option value="1" selected>x1</option>
           <option value="10">x10</option>
-
+          <option value="60">x60</option>
+          <option value="360">x360</option>
         `;
         simControls.appendChild(simSpeedSelect);
+
+        const simSpeedValue = document.createElement('span');
+        simSpeedValue.style.marginLeft = '4px';
+        simSpeedValue.style.color = '#bfe8c8';
+        simSpeedValue.style.fontSize = '11px';
+        simSpeedValue.textContent = 'Velocidad: x1';
+        simControls.appendChild(simSpeedValue);
+
+        const simScenarioLabel = document.createElement('span');
+        simScenarioLabel.textContent = 'Escenario:';
+        simControls.appendChild(simScenarioLabel);
+
+        const simScenarioSelect = document.createElement('select');
+        simScenarioSelect.style.background = 'rgba(12,20,12,0.75)';
+        simScenarioSelect.style.color = '#e8efe8';
+        simScenarioSelect.style.border = '1px solid rgba(255,255,255,0.12)';
+        simScenarioSelect.style.borderRadius = '8px';
+        simScenarioSelect.style.padding = '8px 10px';
+        simScenarioSelect.innerHTML = `
+          <option value="NORMAL" selected>NORMAL</option>
+          <option value="CALOR_EXTREMO">CALOR EXTREMO</option>
+          <option value="SEQUIA">SEQUÍA</option>
+          <option value="LLUVIA">LLUVIA</option>
+          <option value="FRIO_INTENSO">FRÍO INTENSO</option>
+          <option value="DIA_NUBLADO">DÍA NUBLADO</option>
+        `;
+        simControls.appendChild(simScenarioSelect);
 
         const simClockText = document.createElement('span');
         simClockText.style.marginLeft = '6px';
         simClockText.textContent = 'Hora: --:--';
         simControls.appendChild(simClockText);
 
+        const simEventText = document.createElement('span');
+        simEventText.style.marginLeft = '8px';
+        simEventText.style.color = '#bfe8c8';
+        simEventText.style.fontSize = '11px';
+        simEventText.style.opacity = '0.9';
+        simEventText.textContent = 'Escenario normal';
+        simControls.appendChild(simEventText);
+
         monitorPanel.insertBefore(simControls, monitorPanel.querySelector('.sensor-grid'));
 
         // ==============================
-        // Motor local de “hora virtual + sol” para TEMP/HUM/RIEGO
+        // Motor local de “hora virtual + sol + escenarios ambientales”
         // ==============================
         // Este motor SOLO se activa si simModeSelect.value === 'sim'.
         // Cuando está en Backend, se siguen mostrando los valores desde Supabase.
+        const climateScenarios = {
+            NORMAL: {
+                label: 'NORMAL', description: 'Clima estable y equilibrado.',
+                tempBias: 0, humBias: 0, soilBias: 0, luxBias: 1, co2Bias: 0, phBias: 0,
+                tempOn: 30, tempOff: 27, soilOn: 35, soilOff: 60, weatherMode: 'stable'
+            },
+            CALOR_EXTREMO: {
+                label: 'CALOR EXTREMO', description: 'Onda de calor intensa con evaporación rápida.',
+                tempBias: 9, humBias: -18, soilBias: -12, luxBias: 1.25, co2Bias: 120, phBias: 0.08,
+                tempOn: 32, tempOff: 28, soilOn: 38, soilOff: 58, weatherMode: 'heat'
+            },
+            SEQUIA: {
+                label: 'SEQUÍA', description: 'Suelo muy seco y baja humedad relativa.',
+                tempBias: 4, humBias: -14, soilBias: -18, luxBias: 1.15, co2Bias: 80, phBias: 0.06,
+                tempOn: 31, tempOff: 27, soilOn: 32, soilOff: 56, weatherMode: 'dry'
+            },
+            LLUVIA: {
+                label: 'LLUVIA', description: 'Aumento de humedad ambiental sin que el suelo suba por cubierta.',
+                tempBias: -5, humBias: 18, soilBias: 0, luxBias: 0.72, co2Bias: -80, phBias: -0.04,
+                tempOn: 29, tempOff: 24, soilOn: 42, soilOff: 62, weatherMode: 'wet'
+            },
+            FRIO_INTENSO: {
+                label: 'FRÍO INTENSO', description: 'Baja temperatura y humedad más baja.',
+                tempBias: -9, humBias: -8, soilBias: -6, luxBias: 0.85, co2Bias: -40, phBias: -0.05,
+                tempOn: 26, tempOff: 22, soilOn: 35, soilOff: 58, weatherMode: 'cold'
+            },
+            DIA_NUBLADO: {
+                label: 'DÍA NUBLADO', description: 'Poca radiación solar y humedad moderada.',
+                tempBias: -2, humBias: 6, soilBias: 4, luxBias: 0.55, co2Bias: 10, phBias: 0,
+                tempOn: 30, tempOff: 25, soilOn: 36, soilOff: 60, weatherMode: 'cloud'
+            }
+        };
+
         let sim = {
             enabled: false,
-            // hora inicial (se toma del backendAutomation.horaVirtual si existe)
             minutesOfDay: 18 * 60 + 45,
             lastRealMs: Date.now(),
             temp_c: 27,
@@ -2541,12 +2814,13 @@
             modoAutomatico: true,
             modoCalor: false,
             modoSeco: false,
-            // configuración simple (se puede ajustar)
             tempMin: 14,
             tempMax: 38,
             humMin: 45,
             humMax: 85,
-            // umbrales de riego
+            scenario: 'NORMAL',
+            eventState: { heat: false, drought: false, rain: false, cold: false },
+            eventLog: [],
             humRiegoOnBelow: 50,
             humRiegoOffAbove: 60,
         };
@@ -2561,104 +2835,157 @@
             return `${hh}:${mm}`;
         }
 
-        // Curva día/noche (más realista): sol máximo alrededor de 13:00
-        // Devuelve factor 0..1.
+        function getScenarioProfile() {
+            return climateScenarios[sim.scenario] || climateScenarios.NORMAL;
+        }
+
+        function pushScenarioEvent(kind, message) {
+            const entry = { kind, message, at: minutesToHHMM(sim.minutesOfDay) };
+            sim.eventLog.unshift(entry);
+            sim.eventLog = sim.eventLog.slice(0, 6);
+            if (simEventText) {
+                simEventText.textContent = `${getScenarioProfile().label} · ${message}`;
+            }
+        }
+
+        function setScenario(name) {
+            const key = Object.prototype.hasOwnProperty.call(climateScenarios, name) ? name : 'NORMAL';
+            sim.scenario = key;
+            if (simScenarioSelect) simScenarioSelect.value = key;
+            const profile = getScenarioProfile();
+            pushScenarioEvent('scenario', `${profile.label}: ${profile.description}`);
+        }
+
         function solarFactor(minutes) {
-            // Queremos proporcionalidad continua y que al volver de 24h a 0
-            // la TEMP arranque a subir gradualmente.
-            // Definimos un ciclo diario sinusoidal centrado alrededor de las 13:00.
-            // f=0 fuera de “ventana solar” y f~1 cerca del pico.
             const dayMinutes = 24 * 60;
-            const m = ((minutes % dayMinutes) + dayMinutes) % dayMinutes; // 0..1440
-
-            // Pico de radiación (13:00)
+            const m = ((minutes % dayMinutes) + dayMinutes) % dayMinutes;
             const peak = 13 * 60;
-            const halfWindow = 6 * 60; // ventana ~6h a cada lado del pico => 7:00..19:00 aprox
-
-            // Normalizamos el ángulo para obtener una campana suave (sinusoidal)
+            const halfWindow = 6 * 60;
             const dist = Math.abs(m - peak);
-            const distWrap = Math.min(dist, dayMinutes - dist); // distancia sobre el wrap
-
+            const distWrap = Math.min(dist, dayMinutes - dist);
             if (distWrap >= halfWindow) return 0;
-
-            // distWrap=0 => 1; distWrap=halfWindow => 0
-            const t = 1 - (distWrap / halfWindow); // 0..1
-            // Campana suave: sin(pi/2 * t) mantiene continuidad
+            const t = 1 - (distWrap / halfWindow);
             return Math.max(0, Math.min(1, Math.sin((Math.PI / 2) * t)));
         }
 
-
-        // Temperatura ambiente (depende del factor solar) con offset diurno.
-        // Esto evita que el sistema quede “pegado” cerca de humRiegoOnBelow o extremos.
         function tempFromSolarFactor(f) {
-            // Si f=0 => 14°C, si f=1 => 38°C (proporcional)
             return sim.tempMin + (sim.tempMax - sim.tempMin) * f;
         }
 
         function humFromSolarFactor(f) {
-            // Si hace calor (f alta) => humedad baja
             return sim.humMax - (sim.humMax - sim.humMin) * f;
         }
 
-
         function updateLocalClimate(dtSeconds) {
-            // dtSeconds en “tiempo real”; multiplicamos por factor de velocidad
             const speedFactor = (() => {
                 const v = Number(simSpeedSelect.value);
-                if (!v) return 1; // real time
-                return v;
+                return Number.isFinite(v) && v > 0 ? v : 1;
             })();
             const virtualMinutes = dtSeconds * speedFactor;
+            sim.minutesOfDay += (dtSeconds * 60) * speedFactor;
 
-            sim.minutesOfDay += (dtSeconds * 60) * speedFactor; // 1s real => 1 min simulada * speed
-
-            const f = solarFactor(sim.minutesOfDay); // 0..1
-
-            // TEMP sube con el sol
+            const f = solarFactor(sim.minutesOfDay);
+            const profile = getScenarioProfile();
+            const nightRecovery = (1 - f) * 2.4;
+            const solarTemp = tempFromSolarFactor(f) + profile.tempBias;
+            const solarHum = humFromSolarFactor(f) + profile.humBias;
+            const tempCooling = sim.aire ? 2.7 : 0;
+            const tempHeating = sim.modoCalor ? 4 : 0;
             const targetTemp = clamp(
-                sim.tempMin + (sim.tempMax - sim.tempMin) * f + (sim.modoCalor ? 4 : 0) - (sim.aire ? 2.5 : 0),
+                solarTemp + tempHeating - tempCooling + (profile.weatherMode === 'wet' ? -0.7 : 0),
                 sim.tempMin,
                 45
             );
-            // HUM es inversa (cuando más calor/sol, menos humedad)
             const targetHum = clamp(
-                sim.humMax - (sim.humMax - sim.humMin) * f + (sim.riego ? 8 : 0) - (sim.aire ? 1.5 : 0)
-                    - (sim.modoCalor ? 3 : 0) - (sim.modoSeco ? 12 : 0),
+                solarHum + (sim.riego ? 8 : 0) + nightRecovery - (sim.aire ? 1.2 : 0)
+                    - (sim.modoCalor ? 3 : 0) - (sim.modoSeco ? 12 : 0) + profile.humBias,
                 20,
                 95
             );
 
-            // suavizado para que sea “agradable” visualmente
-            // (subimos k para que sea mucho más evidente en pantalla)
             const k = 1 - Math.exp(-dtSeconds * speedFactor * 2.2);
             sim.temp_c = sim.temp_c + (targetTemp - sim.temp_c) * k;
             sim.hum_pct = sim.hum_pct + (targetHum - sim.hum_pct) * k;
 
-            sim.soil_pct = clamp(sim.soil_pct + (sim.riego ? 0.035 : (sim.modoSeco ? -0.016 : -0.008)) * virtualMinutes, 0, 100);
+            const soilLossBase = profile.weatherMode === 'wet' ? 0.002 : 0.008 + (0.006 * f);
+            const soilGain = sim.riego ? 0.052 : 0;
+            const soilDrain = sim.modoSeco ? 0.012 : 0;
+            sim.soil_pct = clamp(
+                sim.soil_pct + (soilGain - (soilLossBase + soilDrain) + profile.soilBias * 0.002) * virtualMinutes,
+                0,
+                100
+            );
 
-            const targetLux = 55000 * f;
+            const targetLux = 55000 * f * profile.luxBias;
             sim.lux += (targetLux - sim.lux) * (1 - Math.exp(-virtualMinutes / 8));
-            const targetCo2 = sim.aire ? 420 : 800 + f * 120;
+            const targetCo2 = (sim.aire ? 420 : 800 + f * 120) + profile.co2Bias;
             sim.co2_ppm += (targetCo2 - sim.co2_ppm) * (1 - Math.exp(-virtualMinutes / (sim.aire ? 5 : 90)));
-            const targetPh = sim.riego ? 6.15 : 6.25;
+            const targetPh = (sim.riego ? 6.15 : 6.25) + profile.phBias;
             sim.ph += (targetPh - sim.ph) * (1 - Math.exp(-virtualMinutes / 360));
 
             sim.temp_c = clamp(sim.temp_c, 14, 45);
             sim.hum_pct = clamp(sim.hum_pct, 20, 95);
             sim.lux = clamp(sim.lux, 0, 60000);
-            sim.co2_ppm = clamp(sim.co2_ppm, 350, 2000);
+            sim.co2_ppm = clamp(sim.co2_ppm, 350, 2200);
             sim.ph = clamp(sim.ph, 5.5, 7.5);
 
             if (sim.modoAutomatico) {
-                if (sim.temp_c >= 30) sim.aire = true;
-                if (sim.temp_c <= 27) sim.aire = false;
-                if (sim.soil_pct <= 35) sim.riego = true;
-                if (sim.soil_pct >= 60) sim.riego = false;
+                const tempOn = profile.tempOn;
+                const tempOff = profile.tempOff;
+                const soilOn = profile.soilOn;
+                const soilOff = profile.soilOff;
+                if (sim.temp_c >= tempOn) sim.aire = true;
+                if (sim.temp_c <= tempOff) sim.aire = false;
+                if (sim.soil_pct <= soilOn) sim.riego = true;
+                if (sim.soil_pct >= soilOff) sim.riego = false;
             }
 
-            // hora visible (UI) en UI
+            const heatActive = sim.temp_c >= 32;
+            const droughtActive = sim.soil_pct <= 38;
+            const rainActive = sim.hum_pct >= 80;
+            const coldActive = sim.temp_c <= 18;
+
+            if (heatActive && !sim.eventState.heat) {
+                pushScenarioEvent('warning', `Alerta térmica: ${sim.temp_c.toFixed(1)}°C con calor extremo.`);
+                sim.eventState.heat = true;
+            } else if (!heatActive && sim.eventState.heat) {
+                pushScenarioEvent('recovery', `Recuperación térmica: ${sim.temp_c.toFixed(1)}°C.`);
+                sim.eventState.heat = false;
+            }
+
+            if (droughtActive && !sim.eventState.drought) {
+                pushScenarioEvent('warning', `Estrés hídrico: suelo ${sim.soil_pct.toFixed(0)}%.`);
+                sim.eventState.drought = true;
+            } else if (!droughtActive && sim.eventState.drought) {
+                pushScenarioEvent('recovery', `Suelo recuperado: ${sim.soil_pct.toFixed(0)}%.`);
+                sim.eventState.drought = false;
+            }
+
+            if (rainActive && !sim.eventState.rain) {
+                pushScenarioEvent('info', `Humedad elevada: ${sim.hum_pct.toFixed(0)}% en el invernadero.`);
+                sim.eventState.rain = true;
+            } else if (!rainActive && sim.eventState.rain) {
+                pushScenarioEvent('recovery', `Humedad normal: ${sim.hum_pct.toFixed(0)}%.`);
+                sim.eventState.rain = false;
+            }
+
+            if (coldActive && !sim.eventState.cold) {
+                pushScenarioEvent('warning', `Frío intenso: ${sim.temp_c.toFixed(1)}°C.`);
+                sim.eventState.cold = true;
+            } else if (!coldActive && sim.eventState.cold) {
+                pushScenarioEvent('recovery', `Temperatura recuperada: ${sim.temp_c.toFixed(1)}°C.`);
+                sim.eventState.cold = false;
+            }
+
+            simSpeedValue.textContent = `Velocidad: x${speedFactor}`;
             simClockText.textContent = `Hora: ${minutesToHHMM(sim.minutesOfDay)}`;
         }
+
+        simScenarioSelect.addEventListener('change', () => {
+            setScenario(simScenarioSelect.value);
+        });
+
+        setScenario(sim.scenario);
 
         function syncLocalSimulationFromBackend() {
             sim.temp_c = backendDevices.temperatura_c;
@@ -3271,6 +3598,30 @@
             lightConnectivity.intensity = 1.2 + Math.sin(elapsed * 2 + 1) * 0.3;
             lightPlatform.intensity = 1.0 + Math.sin(elapsed * 1.8 + 2) * 0.2;
             lightApplication.intensity = luzOn ? 20 : 0;
+
+            /* CAPA AMBIENTAL VISUAL - Consume la simulación actual, no la reemplaza */
+            const visualState = isSimLocal ? {
+                simulatedMinutes: sim.minutesOfDay,
+                scenario: sim.scenario,
+                temperature: sim.temp_c,
+                humidity: sim.hum_pct,
+                soilMoisture: sim.soil_pct,
+                lux: sim.lux,
+                irrigationOn: !!sim.riego,
+                ventilationOn: !!sim.aire,
+                dt
+            } : {
+                simulatedMinutes: ((Number(backendDevices.horaVirtual?.split(':')[0]) || 18) * 60) + (Number(backendDevices.horaVirtual?.split(':')[1]) || 45),
+                scenario: sim.scenario,
+                temperature: Number(backendDevices.temperatura_c) || 27,
+                humidity: Number(backendDevices.humedad_pct) || 68,
+                soilMoisture: Number(backendDevices.humedad_suelo_pct) || 58,
+                lux: Number(backendDevices.iluminancia_lux) || 0,
+                irrigationOn: !!backendDevices.riego,
+                ventilationOn: !!backendDevices.aire,
+                dt
+            };
+            environment.updateEnvironmentVisuals(visualState);
 
             /* Notificación parpadea */
             notifBg.material.opacity = 0.7 + Math.sin(elapsed * 3) * 0.3;

@@ -304,6 +304,8 @@ function createBeds(THREE, parent, createLabel) {
       soilMaterial
     );
     bed.position.set(x, GREENHOUSE.bedHeight / 2, 0);
+    bed.userData.bedIndex = index;
+    bed.userData.bedId = `C${index + 1}`;
     bedGroup.add(bed);
     bedMeshes.push(bed);
 
@@ -949,7 +951,8 @@ export function createGreenhouseModel(THREE, createLabel) {
       THREE, irrigationService, manifold, emitters, updatePulses, active, elapsed
     )
   };
-  group.userData = { dimensions: { ...GREENHOUSE }, bedCenters: beds.centers, irrigation, ventilation: {
+  const bedMeshes = [...beds.meshes];
+  group.userData = { dimensions: { ...GREENHOUSE }, bedCenters: beds.centers, bedMeshes, irrigation, ventilation: {
     group: ventilation.group,
     updateVisualState: (active, elapsed) => updateVentilationVisualState(ventilation, active, elapsed)
   }, iotArchitecture, setBedHighlight: bedSelection.setBedHighlight, setServiceHighlight: (active) => {
