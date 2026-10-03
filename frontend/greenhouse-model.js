@@ -5,8 +5,8 @@ const GREENHOUSE = {
   ridgeHeight: 4,
   frameSpacing: 3,
   bedCount: 6,
-  bedWidth: 1,
-  aisleWidth: 0.45,
+  bedWidth: 1.15,
+  aisleWidth: 0.6,
   bedLengthInset: 0.8,
   bedHeight: 0.22,
   antechamber: {
@@ -86,9 +86,32 @@ function createGround(THREE, parent) {
   );
   floor.position.y = -0.06;
   parent.add(floor);
+
+  const vegetation = new THREE.InstancedMesh(
+    new THREE.SphereGeometry(0.62, 8, 6),
+    new THREE.MeshStandardMaterial({ color: 0x58764e, roughness: 1 }),
+    8
+  );
+  vegetation.name = 'discreet-rural-edge-vegetation';
+  const shrubs = [
+    [-7, -12], [-7, -5], [-7, 3], [-7, 11],
+    [7, -13], [7, 9], [7, 13], [-7, 17]
+  ];
+  const helper = new THREE.Object3D();
+  shrubs.forEach(([x, z], index) => {
+    helper.position.set(x, 0.18, z);
+    helper.scale.set(1.1 + (index % 2) * 0.25, 0.45 + (index % 3) * 0.08, 0.9 + (index % 2) * 0.2);
+    helper.updateMatrix();
+    vegetation.setMatrixAt(index, helper.matrix);
+  });
+  vegetation.instanceMatrix.needsUpdate = true;
+  parent.add(vegetation);
 }
 
 function createGreenhouseStructure(THREE, parent) {
+  const structure = new THREE.Group();
+  structure.name = 'galvanized-structure';
+  parent.add(structure);
   const metal = new THREE.MeshStandardMaterial({ color: 0x9daaa7, metalness: 0.72, roughness: 0.3 });
   const frameCount = Math.round(GREENHOUSE.length / GREENHOUSE.frameSpacing);
   const halfWidth = GREENHOUSE.width / 2;
@@ -115,10 +138,16 @@ function createGreenhouseStructure(THREE, parent) {
     beams.push([[x, 0, -halfLength], [x, 0, halfLength]]);
   }
 
-  addInstancedBeams(THREE, parent, beams, 0.045, metal);
+  addInstancedBeams(THREE, structure, beams, 0.045, metal);
+  return structure;
 }
 
 function createGreenhouseCover(THREE, parent) {
+  const filmGroup = new THREE.Group();
+  filmGroup.name = 'agrofilm-cover';
+  const insectMeshGroup = new THREE.Group();
+  insectMeshGroup.name = 'anti-aphid-mesh';
+  parent.add(filmGroup, insectMeshGroup);
   const halfWidth = GREENHOUSE.width / 2;
   const halfLength = GREENHOUSE.length / 2;
   const eaveX = 0.45;
@@ -128,55 +157,71 @@ function createGreenhouseCover(THREE, parent) {
     color: 0xf4f7ee,
     transparent: true,
     opacity: 0.32,
-    roughness: 0.6,
+    roughness: 0.82,
     side: THREE.DoubleSide,
     depthWrite: false
   });
   const mesh = new THREE.MeshPhysicalMaterial({
-    color: 0x72b7a0,
+    color: 0xc6ded0,
     transparent: true,
-    opacity: 0.17,
+    opacity: 0.24,
     roughness: 0.9,
     side: THREE.DoubleSide,
     depthWrite: false
   });
 
-  addSurface(THREE, parent, [
+  addSurface(THREE, filmGroup, [
     [-halfWidth, GREENHOUSE.sideHeight, -halfLength], [-eaveX, slopeHeight, -halfLength],
     [-eaveX, slopeHeight, halfLength], [-halfWidth, GREENHOUSE.sideHeight, halfLength]
   ], film);
-  addSurface(THREE, parent, [
+  addSurface(THREE, filmGroup, [
     [eaveX, slopeHeight, -halfLength], [halfWidth, GREENHOUSE.sideHeight, -halfLength],
     [halfWidth, GREENHOUSE.sideHeight, halfLength], [eaveX, slopeHeight, halfLength]
   ], film);
 
   for (const x of [-halfWidth, halfWidth]) {
-    addSurface(THREE, parent, [
+    const side = new THREE.Group();
+    side.name = `anti-aphid-mesh-side-${x < 0 ? 'west' : 'east'}`;
+    insectMeshGroup.add(side);
+    addSurface(THREE, side, [
       [x, 0, -halfLength], [x, GREENHOUSE.sideHeight, -halfLength],
       [x, GREENHOUSE.sideHeight, halfLength], [x, 0, halfLength]
     ], mesh);
+    const threadMaterial = new THREE.LineBasicMaterial({ color: 0xd6e7d8, transparent: true, opacity: 0.28 });
+    const threads = [];
+    for (let y = 0.2; y < GREENHOUSE.sideHeight; y += 0.28) {
+      threads.push([[x + (x < 0 ? 0.012 : -0.012), y, -halfLength], [x + (x < 0 ? 0.012 : -0.012), y, halfLength]]);
+    }
+    for (let z = -halfLength; z <= halfLength; z += 0.3) {
+      threads.push([[x + (x < 0 ? 0.014 : -0.014), 0, z], [x + (x < 0 ? 0.014 : -0.014), GREENHOUSE.sideHeight, z]]);
+    }
+    const positions = new Float32Array(threads.flat(2));
+    const threadGeometry = new THREE.BufferGeometry();
+    threadGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    side.add(new THREE.LineSegments(threadGeometry, threadMaterial));
   }
 
   const antechamberEnd = -halfLength;
   const doorWidth = 2.2;
   const sidePanelWidth = (GREENHOUSE.width - doorWidth) / 2;
   for (const xCenter of [-(doorWidth + sidePanelWidth) / 2, (doorWidth + sidePanelWidth) / 2]) {
-    addSurface(THREE, parent, [
+    addSurface(THREE, insectMeshGroup, [
       [xCenter - sidePanelWidth / 2, 0, antechamberEnd],
       [xCenter + sidePanelWidth / 2, 0, antechamberEnd],
       [xCenter + sidePanelWidth / 2, GREENHOUSE.sideHeight, antechamberEnd],
       [xCenter - sidePanelWidth / 2, GREENHOUSE.sideHeight, antechamberEnd]
     ], mesh);
   }
-  addSurface(THREE, parent, [
+  addSurface(THREE, insectMeshGroup, [
     [-halfWidth, 0, halfLength], [halfWidth, 0, halfLength],
     [halfWidth, GREENHOUSE.sideHeight, halfLength], [-halfWidth, GREENHOUSE.sideHeight, halfLength]
   ], mesh);
 
   for (const z of [-halfLength, halfLength]) {
-    addTriangle(THREE, parent, [[-halfWidth, GREENHOUSE.sideHeight, z], [0, GREENHOUSE.ridgeHeight, z], [0, GREENHOUSE.sideHeight, z]], film);
-    addTriangle(THREE, parent, [[0, GREENHOUSE.sideHeight, z], [0, GREENHOUSE.ridgeHeight, z], [halfWidth, GREENHOUSE.sideHeight, z]], film);
+    addTriangle(THREE, filmGroup, [[-halfWidth, GREENHOUSE.sideHeight, z], [0, GREENHOUSE.ridgeHeight, z], [0, GREENHOUSE.sideHeight, z]], film);
+    addTriangle(THREE, filmGroup, [[0, GREENHOUSE.sideHeight, z], [0, GREENHOUSE.ridgeHeight, z], [halfWidth, GREENHOUSE.sideHeight, z]], film);
   }
+  return { filmGroup, insectMeshGroup };
 }
 
 function createRidgeVentilation(THREE, parent, createLabel) {
@@ -285,6 +330,34 @@ function updateVentilationVisualState(ventilation, active, elapsed) {
   });
   ventilation.closedLabel.visible = !active;
   ventilation.openLabel.visible = active;
+  ventilation.lateralFlaps.forEach(({ flap, side }) => {
+    flap.rotation.z = active ? -side * 0.38 : 0;
+  });
+}
+
+function createLateralVentilation(THREE, parent) {
+  const group = new THREE.Group();
+  group.name = 'lateral-mesh-ventilation';
+  parent.add(group);
+  const lateralFlaps = [];
+  const material = new THREE.MeshPhysicalMaterial({
+    color: 0xd8e8dc,
+    transparent: true,
+    opacity: 0.36,
+    roughness: 0.9,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+  for (const side of [-1, 1]) {
+    const flap = new THREE.Group();
+    flap.position.set(side * (GREENHOUSE.width / 2 - 0.03), 1.52, 0);
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.72, GREENHOUSE.length - 1), material);
+    panel.position.x = -side * 0.03;
+    flap.add(panel);
+    group.add(flap);
+    lateralFlaps.push({ flap, side });
+  }
+  return { group, lateralFlaps };
 }
 
 function createBeds(THREE, parent, createLabel) {
@@ -293,6 +366,7 @@ function createBeds(THREE, parent, createLabel) {
   const firstCenter = -occupiedWidth / 2 + GREENHOUSE.bedWidth / 2;
   const soilMaterial = new THREE.MeshStandardMaterial({ color: 0x76553b, roughness: 1 });
   const bedGroup = new THREE.Group();
+  bedGroup.name = 'six-horticultural-beds';
   const bedCenters = [];
   const bedMeshes = [];
 
@@ -313,8 +387,77 @@ function createBeds(THREE, parent, createLabel) {
     label.position.set(x, GREENHOUSE.bedHeight + 0.08, GREENHOUSE.length / 2 - GREENHOUSE.bedLengthInset / 2);
     bedGroup.add(label);
   }
+
+  const cropGroup = new THREE.Group();
+  cropGroup.name = 'horticultural-crop-representation';
+  bedGroup.add(cropGroup);
+  const cropTypes = [
+    { geometry: new THREE.ConeGeometry(0.27, 1.75, 7), material: new THREE.MeshStandardMaterial({ color: 0x367c3c, roughness: 0.9 }), indexes: [0, 1] },
+    { geometry: new THREE.ConeGeometry(0.25, 1.5, 7), material: new THREE.MeshStandardMaterial({ color: 0x4c9148, roughness: 0.9 }), indexes: [2] },
+    { geometry: new THREE.SphereGeometry(0.25, 7, 5), material: new THREE.MeshStandardMaterial({ color: 0x72a84b, roughness: 0.95 }), indexes: [3] },
+    { geometry: new THREE.ConeGeometry(0.24, 0.92, 7), material: new THREE.MeshStandardMaterial({ color: 0x5d9340, roughness: 0.95 }), indexes: [4, 5] }
+  ];
+  const helper = new THREE.Object3D();
+  cropTypes.forEach(({ geometry, material, indexes }) => {
+    const plantCount = indexes.length * 24;
+    const plants = new THREE.InstancedMesh(geometry, material, plantCount);
+    const foliage = geometry.type === 'SphereGeometry' ? null : new THREE.InstancedMesh(
+      new THREE.SphereGeometry(0.19, 6, 5),
+      new THREE.MeshStandardMaterial({ color: material.color.clone().multiplyScalar(1.08), roughness: 0.94 }),
+      plantCount * 3
+    );
+    let instance = 0;
+    let foliageInstance = 0;
+    indexes.forEach((bedIndex) => {
+      const x = bedCenters[bedIndex];
+      for (let row = 0; row < 24; row++) {
+        const z = -13.2 + row * 1.12;
+        const plantX = x + ((row % 2) ? 0.14 : -0.14);
+        const plantY = GREENHOUSE.bedHeight + (geometry.type === 'SphereGeometry' ? 0.16 : 0.75);
+        helper.rotation.set(0, 0, 0);
+        helper.position.set(plantX, plantY, z);
+        helper.scale.set(1, geometry.type === 'SphereGeometry' ? 0.72 : 0.72 + (row % 3) * 0.12, 1);
+        helper.updateMatrix();
+        plants.setMatrixAt(instance++, helper.matrix);
+        if (foliage) {
+          for (let leaf = 0; leaf < 3; leaf++) {
+            const angle = (leaf / 3) * Math.PI * 2 + (row % 2) * 0.4;
+            helper.position.set(plantX + Math.cos(angle) * 0.13, plantY - 0.2 + leaf * 0.28, z + Math.sin(angle) * 0.13);
+            helper.rotation.set(0, -angle, (leaf - 1) * 0.22);
+            helper.scale.set(0.75, 0.52, 1.35);
+            helper.updateMatrix();
+            foliage.setMatrixAt(foliageInstance++, helper.matrix);
+          }
+        }
+      }
+    });
+    plants.instanceMatrix.needsUpdate = true;
+    cropGroup.add(plants);
+    if (foliage) {
+      foliage.instanceMatrix.needsUpdate = true;
+      cropGroup.add(foliage);
+    }
+  });
+
+  const trellisGroup = new THREE.Group();
+  trellisGroup.name = 'lightweight-crop-trellis';
+  cropGroup.add(trellisGroup);
+  const trellisBedX = bedCenters[2];
+  const trellisBeams = [];
+  for (let z = -13; z <= 13; z += 3.25) {
+    trellisBeams.push([[trellisBedX - 0.42, 0.25, z], [trellisBedX - 0.42, 2.15, z]]);
+    trellisBeams.push([[trellisBedX + 0.42, 0.25, z], [trellisBedX + 0.42, 2.15, z]]);
+  }
+  for (const y of [1.2, 2.12]) {
+    trellisBeams.push([[trellisBedX - 0.42, y, -13], [trellisBedX + 0.42, y, -13]]);
+    trellisBeams.push([[trellisBedX - 0.42, y, -13], [trellisBedX - 0.42, y, 13]]);
+    trellisBeams.push([[trellisBedX + 0.42, y, -13], [trellisBedX + 0.42, y, 13]]);
+  }
+  addInstancedBeams(THREE, trellisGroup, trellisBeams, 0.018,
+    new THREE.MeshStandardMaterial({ color: 0xadb9a7, metalness: 0.25, roughness: 0.7 }));
+
   parent.add(bedGroup);
-  return { group: bedGroup, centers: bedCenters, meshes: bedMeshes };
+  return { group: bedGroup, cropGroup, trellisGroup, centers: bedCenters, meshes: bedMeshes };
 }
 
 function createBedSelection(THREE, parent, bedMeshes) {
@@ -336,8 +479,10 @@ function createBedSelection(THREE, parent, bedMeshes) {
 }
 
 function createAntechamber(THREE, parent, createLabel) {
-  // Approximation graphique only: antechamber dimensions need confirmation from the final plan.
   const { width, length, height } = GREENHOUSE.antechamber;
+  const group = new THREE.Group();
+  group.name = 'double-door-antechamber';
+  parent.add(group);
   const z = -GREENHOUSE.length / 2 - length / 2;
   const wallMaterial = new THREE.MeshPhysicalMaterial({
     color: 0x93b7a3,
@@ -350,7 +495,7 @@ function createAntechamber(THREE, parent, createLabel) {
     new THREE.MeshStandardMaterial({ color: 0x675946, roughness: 1 })
   );
   floor.position.set(0, -0.01, z);
-  parent.add(floor);
+  group.add(floor);
 
   const frame = [];
   const halfWidth = width / 2;
@@ -367,23 +512,44 @@ function createAntechamber(THREE, parent, createLabel) {
     frame.push([[-halfWidth, y, z - halfLength], [-halfWidth, y, z + halfLength]]);
     frame.push([[halfWidth, y, z - halfLength], [halfWidth, y, z + halfLength]]);
   }
-  addInstancedBeams(THREE, parent, frame, 0.035,
+  addInstancedBeams(THREE, group, frame, 0.035,
     new THREE.MeshStandardMaterial({ color: 0x95a29d, metalness: 0.65, roughness: 0.35 }));
 
   for (const x of [-halfWidth, halfWidth]) {
-    addSurface(THREE, parent, [
+    addSurface(THREE, group, [
       [x, 0, z - halfLength], [x, height, z - halfLength],
       [x, height, z + halfLength], [x, 0, z + halfLength]
     ], wallMaterial);
   }
-  addSurface(THREE, parent, [
-    [-halfWidth, 0, z - halfLength], [halfWidth, 0, z - halfLength],
-    [halfWidth, height, z - halfLength], [-halfWidth, height, z - halfLength]
-  ], wallMaterial);
+  const doorWidth = 1.5;
+  const doorFrameMaterial = new THREE.MeshStandardMaterial({ color: 0x9daaa7, metalness: 0.68, roughness: 0.34 });
+  const doorLeafMaterial = new THREE.MeshPhysicalMaterial({ color: 0xd6e6db, transparent: true, opacity: 0.34, roughness: 0.72, side: THREE.DoubleSide });
+  for (const endZ of [z - halfLength, z + halfLength]) {
+    for (const side of [-1, 1]) {
+      const x0 = side < 0 ? -halfWidth : doorWidth / 2;
+      const x1 = side < 0 ? -doorWidth / 2 : halfWidth;
+      addSurface(THREE, group, [[x0, 0, endZ], [x1, 0, endZ], [x1, height, endZ], [x0, height, endZ]], wallMaterial);
+    }
+    const door = new THREE.Group();
+    door.name = endZ < z ? 'antechamber-door-1-exterior' : 'antechamber-door-2-interior';
+    door.position.set(0, 0, endZ);
+    group.add(door);
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(doorWidth - 0.08, height - 0.08, 0.045), doorLeafMaterial);
+    leaf.position.set(0, (height - 0.08) / 2, 0);
+    door.add(leaf);
+    const doorFrame = [];
+    for (const x of [-doorWidth / 2, 0, doorWidth / 2]) doorFrame.push([[x, 0, 0], [x, height, 0]]);
+    doorFrame.push([[-doorWidth / 2, height, 0], [doorWidth / 2, height, 0]]);
+    addInstancedBeams(THREE, door, doorFrame, 0.035, doorFrameMaterial);
+    const label = createLabel(endZ < z ? 'PUERTA 1 · EXTERIOR' : 'PUERTA 2 · INVERNADERO', '#d8e4d7', 0.2);
+    label.position.set(0, height + 0.28, 0);
+    door.add(label);
+  }
 
-  const label = createLabel('ANTECÁMARA · APROX.', '#d8e4d7', 0.32);
+  const label = createLabel('ANTECÁMARA · DOBLE ACCESO', '#d8e4d7', 0.32);
   label.position.set(0, height + 0.18, z - halfLength);
-  parent.add(label);
+  group.add(label);
+  return group;
 }
 
 function createZoneGroups(THREE, parent, createLabel) {
@@ -603,7 +769,7 @@ function createPhSensor(THREE, parent, createLabel) {
     zone: 'SERVICIO',
     variable: 'ph',
     unit: 'pH',
-    description: 'Sensor de pH del agua o solución de riego en el punto de servicio.',
+    description: 'Sensor de pH del agua de riego en el punto de servicio; mantiene el equilibrio del sustrato y del fertirriego para evitar estrés nutricional.',
     logicalRef: 'agua-solucion-riego'
   });
   serviceMount.add(sensor);
@@ -711,35 +877,76 @@ function createIrrigationService(THREE, parent, createLabel) {
   inletLabel.position.set(1.05, 0.82, 0.12);
   irrigationServiceGroup.add(inletLabel);
 
+  const tankGroup = new THREE.Group();
+  tankGroup.name = 'irrigation-water-entry';
+  const tank = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.42, 0.42, 1.15, 14),
+    new THREE.MeshStandardMaterial({ color: 0x879993, metalness: 0.22, roughness: 0.56 })
+  );
+  tank.position.set(2.25, 0.66, -0.28);
+  tankGroup.add(tank);
+  const tankTop = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.44, 0.08, 14), tank.material);
+  tankTop.position.set(2.25, 1.28, -0.28);
+  tankGroup.add(tankTop);
+  const tankLabel = createLabel('ENTRADA DE AGUA', '#dce7df', 0.18);
+  tankLabel.position.set(2.25, 1.48, -0.28);
+  tankGroup.add(tankLabel);
+  irrigationServiceGroup.add(tankGroup);
+
   pipeSegments.push(addCylinderBetween(THREE, irrigationServiceGroup, [0.92, 0.42, 0], [0.48, 0.42, 0], 0.11, valveOff, 12));
   const valveBody = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 8), valveOff);
-  valveBody.position.set(0.68, 0.42, 0);
+  valveBody.position.set(0, 0.42, 0);
   irrigationServiceGroup.add(valveBody);
   const valveHandle = new THREE.Mesh(
     new THREE.BoxGeometry(0.34, 0.045, 0.055),
     new THREE.MeshStandardMaterial({ color: 0x515b57, metalness: 0.62, roughness: 0.34 })
   );
-  valveHandle.position.set(0.68, 0.64, 0);
+  valveHandle.position.set(0, 0.64, 0);
   irrigationServiceGroup.add(valveHandle);
   const valveLabel = createLabel('VÁLVULA', '#dce7df', 0.22);
-  valveLabel.position.set(0.68, 0.92, 0.05);
+  valveLabel.position.set(0, 0.92, 0.05);
   irrigationServiceGroup.add(valveLabel);
+
+  const valveGroup = new THREE.Group();
+  valveGroup.name = 'irrigation-valve';
+  valveGroup.add(valveBody, valveHandle);
+  valveGroup.add(valveLabel);
+  irrigationServiceGroup.add(valveGroup);
 
   const filter = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.48, 12), filterOff);
   filter.rotation.z = Math.PI / 2;
-  filter.position.set(0.08, 0.42, 0);
+  filter.position.set(0.68, 0.42, 0);
   irrigationServiceGroup.add(filter);
   const filterRings = [];
-  for (const x of [-0.1, 0.08, 0.26]) {
+  for (const x of [0.5, 0.68, 0.86]) {
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.135, 0.018, 6, 16), filterOff);
     ring.rotation.y = Math.PI / 2;
     ring.position.set(x, 0.42, 0);
     irrigationServiceGroup.add(ring);
     filterRings.push(ring);
   }
-  const filterLabel = createLabel('FILTRO · 120 mesh', '#dce7df', 0.21);
-  filterLabel.position.set(0.08, 0.84, 0.03);
+  const filterLabel = createLabel('FILTRO DE MALLA', '#dce7df', 0.21);
+  filterLabel.position.set(0.68, 0.84, 0.03);
   irrigationServiceGroup.add(filterLabel);
+  const filterGroup = new THREE.Group();
+  filterGroup.name = 'irrigation-filter';
+  filterGroup.add(filter, ...filterRings, filterLabel);
+  irrigationServiceGroup.add(filterGroup);
+
+  const biolGroup = new THREE.Group();
+  biolGroup.name = 'biol-application-point';
+  const injector = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.42, 10),
+    new THREE.MeshStandardMaterial({ color: 0x9b8250, metalness: 0.24, roughness: 0.5 }));
+  injector.position.set(-0.95, 0.67, 0.58);
+  biolGroup.add(injector);
+  const injectorTee = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.48, 8), pipeOff);
+  injectorTee.rotation.z = Math.PI / 2;
+  injectorTee.position.set(-0.95, 0.44, 0.58);
+  biolGroup.add(injectorTee);
+  const biolLabel = createLabel('PUNTO DE APLICACIÓN DE BIOL', '#dce7df', 0.17);
+  biolLabel.position.set(-0.95, 1.02, 0.66);
+  biolGroup.add(biolLabel);
+  irrigationServiceGroup.add(biolGroup);
 
   const gaugeBody = new THREE.Mesh(
     new THREE.CylinderGeometry(0.18, 0.18, 0.1, 20),
@@ -784,6 +991,11 @@ function createIrrigationService(THREE, parent, createLabel) {
 
   return {
     group: irrigationServiceGroup,
+    tankGroup,
+    valveGroup,
+    filterGroup,
+    biolGroup,
+    inletGroup: tankGroup,
     materials: { pipeOff, pipeOn, valveOff, valveOn, filterOff, filterOn },
     valveBody,
     valveHandle,
@@ -811,6 +1023,9 @@ function createIrrigationManifold(THREE, parent, bedCenters, service, createLabe
 
   const dripLines = [];
   const outlets = [];
+  const purgeGroup = new THREE.Group();
+  purgeGroup.name = 'drip-line-purges';
+  irrigationManifoldGroup.add(purgeGroup);
   for (let index = 0; index < IRRIGATION.dripLineCount; index++) {
     const x = bedCenters[index];
     const outlet = addCylinderBetween(THREE, irrigationManifoldGroup,
@@ -828,9 +1043,94 @@ function createIrrigationManifold(THREE, parent, bedCenters, service, createLabe
     line.name = `drip-line-C${index + 1}`;
     line.userData.bedId = `C${index + 1}`;
     dripLines.push(line);
+    const purge = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.24, 8),
+      new THREE.MeshStandardMaterial({ color: 0x7e9387, metalness: 0.35, roughness: 0.5 }));
+    purge.position.set(x, GREENHOUSE.bedHeight + 0.11, IRRIGATION.lineEndZ + 0.07);
+    purgeGroup.add(purge);
   }
 
-  return { group: irrigationManifoldGroup, collector, dripLines, outlets, collectorLabel };
+  return { group: irrigationManifoldGroup, collector, dripLines, outlets, collectorLabel, purgeGroup };
+}
+
+function createOutdoorConnectivity(THREE, parent, esp32Nodes, createLabel) {
+  const group = new THREE.Group();
+  group.name = 'outdoor-satellite-connectivity';
+  parent.add(group);
+
+  const routerGroup = new THREE.Group();
+  routerGroup.name = 'outdoor-access-point';
+  routerGroup.position.set(6.5, 1.15, 1.5);
+  const router = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.2, 0.48),
+    new THREE.MeshStandardMaterial({ color: 0x394842, metalness: 0.38, roughness: 0.46 }));
+  routerGroup.add(router);
+  for (const x of [-0.22, 0.22]) {
+    const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.42, 6),
+      new THREE.MeshStandardMaterial({ color: 0xb1bdb6, metalness: 0.6, roughness: 0.35 }));
+    antenna.position.set(x, 0.28, 0);
+    routerGroup.add(antenna);
+  }
+  const apLabel = createLabel('AP / ROUTER', '#bde7dc', 0.2);
+  apLabel.position.set(0, 0.52, 0.3);
+  routerGroup.add(apLabel);
+  group.add(routerGroup);
+
+  const internalNetwork = new THREE.Group();
+  internalNetwork.name = 'internal-network-node';
+  internalNetwork.position.set(7.8, 2.05, -1.65);
+  const networkNode = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.18, 0.24),
+    new THREE.MeshStandardMaterial({ color: 0x5e7169, metalness: 0.32, roughness: 0.46 }));
+  internalNetwork.add(networkNode);
+  const networkLabel = createLabel('RED INTERNA', '#bde7dc', 0.16);
+  networkLabel.position.y = 0.3;
+  internalNetwork.add(networkLabel);
+  group.add(internalNetwork);
+
+  const satelliteGroup = new THREE.Group();
+  satelliteGroup.name = 'satellite-dish-and-mast';
+  satelliteGroup.position.set(9.2, 0, -4.5);
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.065, 2.8, 8),
+    new THREE.MeshStandardMaterial({ color: 0x9daaa7, metalness: 0.72, roughness: 0.32 }));
+  mast.position.y = 1.4;
+  satelliteGroup.add(mast);
+  const dishProfile = [
+    new THREE.Vector2(0.04, 0), new THREE.Vector2(0.14, 0.025),
+    new THREE.Vector2(0.27, 0.09), new THREE.Vector2(0.41, 0.2),
+    new THREE.Vector2(0.55, 0.36)
+  ];
+  const dishMaterial = new THREE.MeshStandardMaterial({ color: 0xd7dfd8, metalness: 0.54, roughness: 0.38, side: THREE.DoubleSide });
+  const dish = new THREE.Mesh(new THREE.LatheGeometry(dishProfile, 20), dishMaterial);
+  dish.position.y = 2.42;
+  satelliteGroup.add(dish);
+  const dishRim = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.018, 6, 28), dishMaterial);
+  dishRim.position.y = 2.78;
+  dishRim.rotation.x = Math.PI / 2;
+  satelliteGroup.add(dishRim);
+  const feedMaterial = new THREE.MeshStandardMaterial({ color: 0x77857d, metalness: 0.64, roughness: 0.35 });
+  addCylinderBetween(THREE, satelliteGroup, [0, 2.5, 0], [0, 2.86, 0.24], 0.022, feedMaterial, 6);
+  const feed = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), feedMaterial);
+  feed.position.set(0, 2.86, 0.24);
+  satelliteGroup.add(feed);
+  const dishLabel = createLabel('ANTENA SATELITAL', '#dce7df', 0.2);
+  dishLabel.position.set(0, 3.55, 0);
+  satelliteGroup.add(dishLabel);
+  group.add(satelliteGroup);
+
+  const linkMaterial = new THREE.LineBasicMaterial({ color: 0x55c9d2, transparent: true, opacity: 0.48 });
+  const linkSegments = [];
+  const apPosition = routerGroup.position.clone();
+  esp32Nodes.forEach((node) => {
+    const nodePosition = new THREE.Vector3();
+    node.getWorldPosition(nodePosition);
+    linkSegments.push([nodePosition.toArray(), [apPosition.x, apPosition.y, apPosition.z]]);
+  });
+  linkSegments.push([[apPosition.x, apPosition.y, apPosition.z], internalNetwork.position.toArray()]);
+  linkSegments.push([internalNetwork.position.toArray(), satelliteGroup.position.clone().add(new THREE.Vector3(0, 3, 0)).toArray()]);
+  const linkPositions = new Float32Array(linkSegments.flat(2));
+  const linkGeometry = new THREE.BufferGeometry();
+  linkGeometry.setAttribute('position', new THREE.BufferAttribute(linkPositions, 3));
+  group.add(new THREE.LineSegments(linkGeometry, linkMaterial));
+
+  return { group, routerGroup, satelliteGroup };
 }
 
 function createEmitters(THREE, parent, bedCenters) {
@@ -921,10 +1221,12 @@ export function createGreenhouseModel(THREE, createLabel) {
   group.name = 'invernia-greenhouse-30x10';
   createGround(THREE, group);
   const beds = createBeds(THREE, group, createLabel);
-  createGreenhouseStructure(THREE, group);
-  createGreenhouseCover(THREE, group);
-  const ventilation = createRidgeVentilation(THREE, group, createLabel);
-  createAntechamber(THREE, group, createLabel);
+  const structure = createGreenhouseStructure(THREE, group);
+  const cover = createGreenhouseCover(THREE, group);
+  const ridgeVentilation = createRidgeVentilation(THREE, group, createLabel);
+  const lateralVentilation = createLateralVentilation(THREE, group);
+  ridgeVentilation.lateralFlaps = lateralVentilation.lateralFlaps;
+  const antechamber = createAntechamber(THREE, group, createLabel);
   const zones = createZoneGroups(THREE, group, createLabel);
   const irrigationService = createIrrigationService(THREE, group, createLabel);
   const serviceHighlight = new THREE.Mesh(
@@ -939,6 +1241,7 @@ export function createGreenhouseModel(THREE, createLabel) {
   const emitters = createEmitters(THREE, group, beds.centers);
   const updatePulses = createWaterPulses(THREE, group, beds.centers);
   const iotArchitecture = createIoTArchitecture(THREE, group, zones, beds.centers, createLabel);
+    const connectivity = createOutdoorConnectivity(THREE, group, iotArchitecture.esp32Nodes, createLabel);
   const bedSelection = createBedSelection(THREE, group, beds.meshes);
   const irrigation = {
     serviceGroup: irrigationService.group,
@@ -952,10 +1255,125 @@ export function createGreenhouseModel(THREE, createLabel) {
     )
   };
   const bedMeshes = [...beds.meshes];
+  const educationalComponents = {};
+  const registerEducationalComponent = (id, category, name, description, objects, focusDirection = [1, 0.58, 1], focusOptions = {}) => {
+    educationalComponents[id] = {
+      id,
+      category,
+      name,
+      description,
+      objects: Array.isArray(objects) ? objects : [objects],
+      focusDirection,
+      ...focusOptions
+    };
+  };
+  registerEducationalComponent('overview', 'general', 'INVERNADERO HORTÍCOLA · 300 m²',
+    'Invernadero hortícola de 30,00 × 10,00 m, estructura tubular galvanizada y cubierta agrícola.', group, [1, 0.68, 1]);
+  registerEducationalComponent('structure', 'greenhouse', 'ESTRUCTURA GALVANIZADA',
+    'Estructura tubular metálica galvanizada. Altura lateral 2,50 m y cumbrera 4,00 m.', structure, [1, 0.5, 1], {
+      focusPoint: [0, 2.5, 0], focusDistance: 19
+    });
+  registerEducationalComponent('agrofilm', 'greenhouse', 'AGROFILM',
+    'Cubierta de polietileno de larga duración con tratamiento UV. Espesor: 150–200 micrones.', cover.filmGroup, [0.8, 0.72, 1], {
+      material: 'Polietileno de larga duración con tratamiento UV',
+      specification: '150–200 micrones',
+      focusPoint: [0, 3.2, 0],
+      focusDistance: 11
+    });
+  registerEducationalComponent('insectMesh', 'greenhouse', 'MALLA ANTIÁFIDO',
+    'Cerramiento lateral protegido con malla antiáfido, diferenciado visualmente de la cubierta de agrofilm.', cover.insectMeshGroup, [1.8, 0.32, 0.7], {
+      focusPoint: [5, 1.5, 0], focusDistance: 9
+    });
+  registerEducationalComponent('ridgeVent', 'greenhouse', 'VENTILACIÓN CENITAL',
+    'Sistema regulable ubicado en la cumbrera para favorecer la renovación natural del aire.', ridgeVentilation.group, [1, 1, 1], {
+      focusPoint: [0, 4, 0], focusDistance: 11
+    });
+  registerEducationalComponent('lateralVent', 'greenhouse', 'VENTILACIÓN LATERAL',
+    'Aperturas laterales protegidas con malla antiáfido; se muestran reducidas o abiertas junto con la ventilación cenital.', lateralVentilation.group, [1.8, 0.28, 0.65], {
+      focusPoint: [5, 1.5, 0], focusDistance: 9
+    });
+  registerEducationalComponent('ventilation', 'greenhouse', 'VENTILACIÓN CENITAL + LATERAL',
+    'La ventilación regulable de cumbrera y las aperturas laterales con malla se muestran juntas.',
+    [ridgeVentilation.group, lateralVentilation.group], [1.5, 0.8, 1]);
+  registerEducationalComponent('antechamber', 'greenhouse', 'ANTECÁMARA · DOBLE ACCESO',
+    'Acceso exterior por puerta 1, antecámara y puerta 2 hacia el invernadero, como dos barreras de entrada.', antechamber, [0.12, 0.36, -1], {
+      focusPoint: [0, 1.4, -16.5], focusDistance: 8
+    });
+  registerEducationalComponent('beds', 'crops', 'CAMELLONES C1–C6',
+    'Seis camellones de 1,15 m de ancho y pasillos de 0,60 m; sustrato mejorado con compost.', beds.group, [1, 0.42, 0.38], {
+      focusPoint: [0, 0.55, 0], focusDistance: 34
+    });
+  beds.meshes.forEach((bed, index) => {
+    registerEducationalComponent(`bedC${index + 1}`, 'crops', `CAMELLÓN C${index + 1}`,
+      `Camellón C${index + 1} con sustrato mejorado con compost; ancho nominal 1,15 m.`, bed, [0.1, 1.2, 0.9], {
+        bedId: `C${index + 1}`,
+        focusPoint: [bed.position.x, 0.65, 0],
+        focusDistance: 9
+      });
+  });
+  registerEducationalComponent('crops', 'crops', 'PRODUCCIÓN HORTÍCOLA',
+    'Representación visual diversa de hortalizas altas, guiadas, de hoja baja y de porte medio. Es ilustrativa, no asigna cultivos a camellones.', beds.cropGroup, [1, 0.42, 0.38], {
+      focusPoint: [0, 1.2, 0], focusDistance: 34
+    });
+  registerEducationalComponent('waterEntry', 'irrigation', 'ENTRADA DE AGUA',
+    'Entrada visual del circuito de riego que conduce hacia el filtro, la válvula y el colector.', irrigationService.tankGroup, [1.4, 0.55, 1.2]);
+  registerEducationalComponent('irrigationFilter', 'irrigation', 'FILTRO DE MALLA',
+    'Elemento de filtrado del agua antes de su distribución por el sistema de goteo.', irrigationService.filterGroup, [1.7, 0.65, 1.2]);
+  registerEducationalComponent('irrigationValve', 'irrigation', 'VÁLVULA',
+    'Válvula manual representada en la línea de servicio del riego.', irrigationService.valveGroup, [1.7, 0.65, 1.2]);
+  registerEducationalComponent('irrigationCollector', 'irrigation', 'COLECTOR',
+    'Colector con seis salidas, una hacia cada lateral de goteo.', manifold.collector, [0.2, 1.4, 1.4]);
+  registerEducationalComponent('dripLines', 'irrigation', 'LÍNEAS DE GOTEO',
+    'Seis laterales de goteo distribuidos sobre los seis camellones.', [...manifold.dripLines, emitters.mesh], [0.1, 1.9, 0.8]);
+  registerEducationalComponent('irrigationSystem', 'irrigation', 'RIEGO POR GOTEO',
+    'Entrada de agua → filtro → válvula → colector → seis laterales de goteo → purgas finales.',
+    [irrigationService.group, manifold.group], [1, 0.42, 0.38], { focusPoint: [0.4, 0.75, -2], focusDistance: 34 });
+  registerEducationalComponent('purges', 'irrigation', 'PURGAS',
+    'Terminaciones de purga visibles al final de los laterales de goteo.', manifold.purgeGroup, [0.5, 1.2, 1.8]);
+  registerEducationalComponent('biolPoint', 'irrigation', 'PUNTO DE APLICACIÓN DE BIOL',
+    'Punto previsto para aplicación de biol diluido y previamente filtrado mediante inyector o aplicación manual. No es automatizado.', irrigationService.biolGroup, [1.7, 0.7, 1.2]);
+  iotArchitecture.selectableDevices.forEach((device) => {
+    const metadata = device.userData.iotDevice;
+    const id = metadata.id === 'PH-01' ? 'phSensor'
+      : metadata.type === 'controller' ? `esp32${metadata.zone}`
+        : metadata.type === 'environmental_station' ? `station${metadata.zone}`
+          : `soilC${metadata.camellon.slice(1)}`;
+    const category = metadata.type === 'ph_sensor' ? 'iot'
+      : metadata.type === 'soil_moisture_sensor' ? 'iot'
+        : 'iot';
+    const description = metadata.type === 'ph_sensor'
+      ? 'Medición de pH del agua o solución utilizada en el sistema de riego/fertirriego.'
+      : metadata.type === 'soil_moisture_sensor'
+        ? `${metadata.description} Humedad actual del suelo y camellón asociados disponibles en la ficha.`
+        : metadata.type === 'environmental_station'
+          ? `${metadata.description} Lecturas ambientales existentes disponibles en la ficha.`
+          : `${metadata.description} Función: adquirir señales de sus sensores de zona y comunicarlas por la red local.`;
+    const componentName = metadata.type === 'soil_moisture_sensor'
+      ? `SENSOR DE SUELO ${metadata.camellon}`
+      : metadata.name.toUpperCase();
+    const focusDirection = metadata.type === 'controller' ? [-1, 0.38, 0.72]
+      : metadata.type === 'soil_moisture_sensor' ? [0.25, 0.9, 1]
+        : metadata.type === 'ph_sensor' ? [1, 0.5, 1]
+          : [1, 0.42, 0.65];
+    registerEducationalComponent(id, category, componentName, description, device, focusDirection);
+  });
+  registerEducationalComponent('iotArchitecture', 'iot', 'ARQUITECTURA IoT',
+    'Tres nodos ESP32, tres estaciones ambientales, seis sensores de humedad de suelo y un sensor de pH. Se reutilizan los 13 dispositivos del modelo.',
+    iotArchitecture.selectableDevices, [0.15, 0.6, 1], { focusPoint: [0, 1.2, 0], focusDistance: 27 });
+  registerEducationalComponent('accessPoint', 'connectivity', 'PUNTO DE ACCESO / ROUTER',
+    'Punto de acceso exterior que concentra la comunicación Wi‑Fi local y enlaza con la red interna.', connectivity.routerGroup, [1.7, 0.7, 1.2]);
+  registerEducationalComponent('satelliteAntenna', 'connectivity', 'ANTENA SATELITAL',
+    'Antena satelital exterior sobre mástil, separada de la cubierta del invernadero.', connectivity.satelliteGroup, [1.8, 0.72, 1.3]);
+  registerEducationalComponent('connectivityArchitecture', 'connectivity', 'ARQUITECTURA DE CONECTIVIDAD',
+    'ESP32 → Wi‑Fi local → AP/router → red interna → internet satelital. Los nodos no se conectan directamente a la antena.', connectivity.group, [0.25, 0.55, 0.9], {
+      focusPoint: [2.5, 1.8, 0], focusDistance: 29
+    });
+
   group.userData = { dimensions: { ...GREENHOUSE }, bedCenters: beds.centers, bedMeshes, irrigation, ventilation: {
-    group: ventilation.group,
-    updateVisualState: (active, elapsed) => updateVentilationVisualState(ventilation, active, elapsed)
-  }, iotArchitecture, setBedHighlight: bedSelection.setBedHighlight, setServiceHighlight: (active) => {
+    group: ridgeVentilation.group,
+    lateralGroup: lateralVentilation.group,
+    updateVisualState: (active, elapsed) => updateVentilationVisualState(ridgeVentilation, active, elapsed)
+  }, iotArchitecture, connectivity, educationalComponents, setBedHighlight: bedSelection.setBedHighlight, setServiceHighlight: (active) => {
     serviceHighlight.visible = active;
   }, ...zones };
   return group;

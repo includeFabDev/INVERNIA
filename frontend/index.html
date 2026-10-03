@@ -66,6 +66,186 @@
             animation: pulse-dot 2s ease-in-out infinite;
         }
 
+        .explorer-panel {
+            position: fixed;
+            top: 98px;
+            right: 20px;
+            z-index: 35;
+            width: min(340px, calc(100vw - 32px));
+            max-height: calc(100vh - 220px);
+            overflow-y: auto;
+            padding: 18px 18px 14px;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            background: rgba(12, 20, 12, 0.86);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
+            transition: transform 0.25s ease, opacity 0.25s ease;
+        }
+
+        .explorer-panel.hidden {
+            opacity: 0;
+            pointer-events: none;
+            transform: translateX(calc(100% + 20px));
+        }
+
+        .explorer-panel-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .explorer-panel h2 {
+            margin-top: 8px;
+            font-size: 18px;
+            line-height: 1.2;
+        }
+
+        .explorer-badge {
+            display: inline-flex;
+            margin-bottom: 0;
+            padding: 4px 10px;
+            border: 1px solid rgba(46, 204, 113, 0.4);
+            background: rgba(46, 204, 113, 0.08);
+            color: var(--physical);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+        }
+
+        .explorer-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .explorer-category {
+            border-top: 1px solid rgba(255,255,255,0.09);
+        }
+
+        .explorer-category summary {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 40px;
+            color: #e4eee5;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            cursor: pointer;
+            list-style: none;
+        }
+
+        .explorer-category summary::-webkit-details-marker { display: none; }
+        .explorer-category summary::after { content: '+'; color: #8bbf9c; font-size: 16px; }
+        .explorer-category[open] summary::after { content: '−'; }
+
+        .explorer-category .explorer-list { padding: 0 0 10px; }
+
+        .explorer-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 10px;
+            background: rgba(255,255,255,0.02);
+            color: var(--fg);
+            text-align: left;
+            cursor: pointer;
+            transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+        }
+
+        .explorer-item:hover,
+        .explorer-item:focus-visible {
+            border-color: rgba(46, 204, 113, 0.5);
+            background: rgba(46, 204, 113, 0.08);
+            transform: translateY(-1px);
+        }
+
+        .explorer-item strong {
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+        }
+
+        .explorer-item span {
+            color: var(--muted);
+            font-size: 11.5px;
+            line-height: 1.4;
+        }
+
+        .tour-status {
+            margin-top: 10px;
+            padding: 8px 10px;
+            border: 1px solid rgba(0,188,212,0.32);
+            border-radius: 8px;
+            background: rgba(0,188,212,0.05);
+            color: #bfe6f0;
+            font-size: 11.5px;
+            letter-spacing: 0.04em;
+        }
+
+        .tour-controls,
+        .component-actions {
+            display: flex;
+            gap: 7px;
+            margin-top: 10px;
+        }
+
+        .tour-controls button,
+        .component-actions button {
+            min-height: 34px;
+            padding: 7px 10px;
+            border: 1px solid rgba(255,255,255,0.14);
+            border-radius: 7px;
+            background: rgba(255,255,255,0.04);
+            color: var(--fg);
+            font: 600 11px 'Space Grotesk', sans-serif;
+            cursor: pointer;
+        }
+
+        .tour-controls button:hover,
+        .component-actions button:hover { border-color: rgba(100, 220, 170, 0.55); }
+        .tour-controls [data-tour-action="next"],
+        .component-actions [data-component-action="focus"] {
+            background: rgba(46,204,113,0.14);
+            border-color: rgba(46,204,113,0.42);
+        }
+
+        .component-card {
+            position: fixed;
+            left: 20px;
+            bottom: 96px;
+            z-index: 46;
+            width: min(340px, calc(100vw - 32px));
+            max-height: min(300px, 34vh);
+            overflow-y: auto;
+            padding: 15px;
+            border: 1px solid rgba(107,230,208,0.32);
+            border-radius: 12px;
+            background: rgba(12,20,12,0.93);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+            backdrop-filter: blur(18px);
+        }
+
+        .component-card[hidden] { display: none; }
+        .component-card h2 { margin: 8px 28px 8px 0; font-size: 16px; line-height: 1.25; }
+        .component-card p { color: #bdc9bf; font-size: 12px; line-height: 1.5; }
+        .component-card dl { display: grid; grid-template-columns: 82px 1fr; gap: 5px 8px; margin-top: 10px; font-size: 11px; }
+        .component-card dt { color: #8ea092; }
+        .component-card dd { color: #e0e8df; overflow-wrap: anywhere; }
+        .component-card .iot-device-close { position: absolute; top: 10px; right: 10px; }
+
+        @media (max-width: 600px) {
+            .explorer-panel { top: 84px; right: 8px; width: min(330px, calc(100vw - 16px)); max-height: 42vh; }
+            .component-card { left: 8px; bottom: 88px; width: min(330px, calc(100vw - 16px)); max-height: 32vh; }
+        }
+
         @keyframes pulse-dot {
             0%, 100% { opacity: 0.6; transform: scale(1); }
             50% { opacity: 1; transform: scale(1.3); }
@@ -702,6 +882,39 @@
         }
 
         /* Navigation */
+        .quick-actions {
+            position: fixed;
+            right: 18px;
+            top: 18px;
+            z-index: 45;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 8px;
+            max-width: min(56vw, 460px);
+        }
+
+        .quick-action {
+            min-height: 32px;
+            padding: 7px 12px;
+            border: 1px solid rgba(148, 176, 160, 0.24);
+            border-radius: 999px;
+            background: rgba(10, 16, 12, 0.5);
+            color: var(--fg);
+            font: 700 9px 'Space Grotesk', sans-serif;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+
+        .quick-action:hover,
+        .quick-action.active {
+            border-color: rgba(105, 230, 208, 0.5);
+            background: rgba(105, 230, 208, 0.12);
+            box-shadow: 0 0 0 1px rgba(105, 230, 208, 0.18);
+        }
+
         .nav-bar {
             position: fixed;
             bottom: 20px;
@@ -919,6 +1132,41 @@
         <span style="font-size:12px; color:var(--muted); margin-left:4px;">/ Invernadero Inteligente</span>
     </header>
 
+    <div class="quick-actions" aria-label="Controles rápidos del gemelo digital">
+        <button class="quick-action" type="button" data-action="explore">Explorar</button>
+        <button class="quick-action" type="button" data-action="tour">Recorrido guiado</button>
+    </div>
+
+    <aside class="explorer-panel hidden" id="explorerPanel" aria-label="Explorador de componentes del gemelo digital">
+        <div class="explorer-panel-header">
+            <div>
+                <div class="explorer-badge">EXPLORAR</div>
+                <h2>Explorador de componentes</h2>
+            </div>
+            <button class="iot-device-close" id="explorerClose" type="button" aria-label="Cerrar explorador" title="Cerrar explorador">×</button>
+        </div>
+        <div class="explorer-list" id="explorerList"></div>
+        <div class="tour-status" id="tourStatus" hidden></div>
+        <div class="tour-controls" id="tourControls" hidden>
+            <button type="button" data-tour-action="previous">Anterior</button>
+            <button type="button" data-tour-action="next">Siguiente</button>
+            <button type="button" data-tour-action="exit">Salir</button>
+        </div>
+    </aside>
+
+    <aside class="component-card" id="componentCard" aria-label="Ficha educativa del componente" hidden>
+        <button class="iot-device-close" id="componentClose" type="button" aria-label="Cerrar ficha" title="Cerrar ficha">×</button>
+        <div class="explorer-badge" id="componentCategory"></div>
+        <h2 id="componentName"></h2>
+        <p id="componentDescription"></p>
+        <dl id="componentDetails"></dl>
+        <div class="component-actions">
+            <button type="button" data-component-action="focus">Enfocar</button>
+            <button type="button" data-component-action="associated" hidden>Ver sensores asociados</button>
+            <button type="button" data-component-action="close">Cerrar</button>
+        </div>
+    </aside>
+
     <button class="side-drawer-tab side-drawer-tab-left" id="dashboardDrawerToggle" type="button" aria-controls="monitorPanel" aria-expanded="false">
         <span>Dashboard</span>
     </button>
@@ -983,21 +1231,21 @@
             <div class="mode-row">
                 <div>
                     <div class="section-label">MODO DE CONTROL</div>
-                    <div class="mode-state" id="modeState">AUTOMÁTICO</div>
+                    <div class="mode-state" id="modeState">MANUAL</div>
                 </div>
                 <div class="mode-selector" role="group" aria-label="Modo de control">
-                    <button class="mode-button" id="modeManual" type="button" data-mode="manual" aria-pressed="false">MANUAL</button>
-                    <button class="mode-button active" id="modeAutomatic" type="button" data-mode="automatic" aria-pressed="true">AUTOMÁTICO</button>
+                    <button class="mode-button active" id="modeManual" type="button" data-mode="manual" aria-pressed="true">MANUAL</button>
+                    <button class="mode-button" id="modeAutomatic" type="button" data-mode="automatic" aria-pressed="false">AUTOMÁTICO</button>
                 </div>
             </div>
             <div class="actuator-grid">
                 <div class="actuator-card">
                     <div class="actuator-title"><span class="actuator-indicator" id="irrigationIndicator"></span>RIEGO <span id="irrigationState">OFF</span></div>
-                    <button class="actuator-action" id="irrigationAction" type="button" disabled>Control automático</button>
+                    <button class="actuator-action" id="irrigationAction" type="button">Encender riego</button>
                 </div>
                 <div class="actuator-card">
                     <div class="actuator-title"><span class="actuator-indicator" id="ventilationIndicator"></span>VENTILACIÓN <span id="ventilationState">OFF</span></div>
-                    <button class="actuator-action" id="ventilationAction" type="button" disabled>Control automático</button>
+                    <button class="actuator-action" id="ventilationAction" type="button">Encender ventilación</button>
                 </div>
             </div>
         </section>
@@ -1147,26 +1395,26 @@
                 badge: 'CAPA 1 — FÍSICA',
                 badgeColor: 'var(--physical)',
                 badgeBg: 'rgba(46,204,113,0.1)',
-                title: 'Sensor de Temperatura en el Invernadero',
-                desc: 'Dentro del invernadero, un sensor de temperatura detecta que la temperatura ha subido a 38°C, superando el umbral seguro de 35°C. El sensor convierte la señal analógica del termistor a un valor digital que puede ser transmitido. Este es el punto de contacto entre el mundo físico y el mundo digital.',
+                title: 'Capa física: estructura, suelo y cubierta agrícola',
+                desc: 'La estructura del invernadero y su cobertura agrícola son la primera frontera del sistema: el agrofilm de 150–200 µm protege el cultivo, reduce pérdidas de vapor y mantiene un microclima estable. En la capa física también se mide temperatura, humedad del suelo y pH del agua de riego para convertir señales reales en datos útiles.',
                 elements: [
-                    { icon: 'fa-solid fa-temperature-high', color: 'var(--physical)', text: 'Termistor mide la temperatura ambiente continua' },
-                    { icon: 'fa-solid fa-microchip', color: 'var(--physical)', text: 'ADC convierte la señal analógica a digital' },
-                    { icon: 'fa-solid fa-leaf', color: 'var(--physical)', text: 'Plantas de tomate necesitan temperatura controlada' },
-                    { icon: 'fa-solid fa-bolt', color: 'var(--physical)', text: 'Alimentación por batería con panel solar' },
+                    { icon: 'fa-solid fa-leaf', color: 'var(--physical)', text: 'Agrofilm de 150–200 µm para control microclimático' },
+                    { icon: 'fa-solid fa-temperature-high', color: 'var(--physical)', text: 'Sensor de temperatura y humedad del aire' },
+                    { icon: 'fa-solid fa-droplet', color: 'var(--physical)', text: 'Sensor de humedad del suelo en cada camellón' },
+                    { icon: 'fa-solid fa-microchip', color: 'var(--physical)', text: 'pH de agua de riego en el punto de servicio' },
                 ]
             },
             connectivity: {
                 badge: 'CAPA 2 — CONECTIVIDAD',
                 badgeColor: 'var(--connectivity)',
                 badgeBg: 'rgba(0,188,212,0.1)',
-                title: 'Transmisión Wi-Fi del Dato',
-                desc: 'El dato digital (38°C) viaja codificado a través de ondas de radio Wi-Fi (2.4 GHz) desde el módulo del sensor hasta el router del invernadero. Desde ahí, por fibra óptica o 4G, llega al servidor en la nube. La conectividad es el puente que hace posible que la información cruce distancias en milisegundos.',
+                title: 'Cadena de conectividad: ESP32 → Wi‑Fi → router → nube',
+                desc: 'Los nodos ESP32 capturan mediciones y las emiten por Wi‑Fi 2.4 GHz hacia el router del invernadero. El enlace de datos conecta sensores, estaciones ambientales y puntos de servicio con la infraestructura local y la capa de plataforma para analizar la información en tiempo real.',
                 elements: [
-                    { icon: 'fa-solid fa-wifi', color: 'var(--connectivity)', text: 'Módulo ESP32 emite paquetes Wi-Fi' },
-                    { icon: 'fa-solid fa-tower-broadcast', color: 'var(--connectivity)', text: 'Router del invernadero recibe y reenvía' },
-                    { icon: 'fa-solid fa-shield-halved', color: 'var(--connectivity)', text: 'Cifrado WPA3 protege los datos en tránsito' },
-                    { icon: 'fa-solid fa-clock', color: 'var(--connectivity)', text: 'Latencia típica: 15-50 milisegundos' },
+                    { icon: 'fa-solid fa-microchip', color: 'var(--connectivity)', text: 'ESP32 captura la señal del sensor' },
+                    { icon: 'fa-solid fa-wifi', color: 'var(--connectivity)', text: 'Wi‑Fi 2.4 GHz transmite la lectura al router' },
+                    { icon: 'fa-solid fa-tower-broadcast', color: 'var(--connectivity)', text: 'Router y repetidor consolidan la red local' },
+                    { icon: 'fa-solid fa-cloud', color: 'var(--connectivity)', text: 'Los datos llegan a la plataforma para decidir acciones' },
                 ]
             },
             platform: {
@@ -1348,11 +1596,20 @@
 
             const rainCount = 650;
             const rainPositions = new Float32Array(rainCount * 3);
+            const placeRainDrop = (positions, index, height = null) => {
+                const outsideSide = Math.random() < 0.55;
+                const side = Math.random() < 0.5 ? -1 : 1;
+                positions[index] = outsideSide
+                    ? side * (5.8 + Math.random() * 7.2)
+                    : (Math.random() - 0.5) * 11.4;
+                positions[index + 1] = height ?? (2 + Math.random() * 18);
+                positions[index + 2] = outsideSide
+                    ? (Math.random() - 0.5) * 38
+                    : side * (15.4 + Math.random() * 4.5);
+            };
             for (let i = 0; i < rainCount; i++) {
                 const index = i * 3;
-                rainPositions[index] = (Math.random() - 0.5) * 28;
-                rainPositions[index + 1] = 2 + Math.random() * 18;
-                rainPositions[index + 2] = (Math.random() - 0.5) * 26;
+                placeRainDrop(rainPositions, index);
             }
             const rainGeo = new THREE.BufferGeometry();
             rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPositions, 3));
@@ -1480,9 +1737,7 @@
                     for (let i = 0; i < positions.length; i += 3) {
                         positions[i + 1] -= (dt || 0.016) * 18;
                         if (positions[i + 1] < 0) {
-                            positions[i + 1] = 16 + Math.random() * 10;
-                            positions[i] = (Math.random() - 0.5) * 26;
-                            positions[i + 2] = (Math.random() - 0.5) * 24;
+                            placeRainDrop(positions, i, 16 + Math.random() * 10);
                         }
                     }
                     rain.geometry.attributes.position.needsUpdate = true;
@@ -1936,6 +2191,7 @@
         riegoIndicator = null;
         const greenhouseModel = createGreenhouseModel(THREE, createLabel);
         physicalGroup.add(greenhouseModel);
+        const educationalComponents = greenhouseModel.userData.educationalComponents;
         const iotArchitecture = greenhouseModel.userData.iotArchitecture;
         const iotSelectableRoots = iotArchitecture.selectableDevices;
         const iotRootsById = new Map(iotSelectableRoots.map((device) => [device.userData.iotDevice.id, device]));
@@ -1953,7 +2209,10 @@
             greenhouseModel.add(marker);
             return marker;
         });
+        const educationalHighlight = new THREE.Box3Helper(new THREE.Box3(), 0x52e6ae);
+        educationalHighlight.visible = false;
         scene.add(physicalGroup);
+        scene.add(educationalHighlight);
         const environment = createEnvironmentSystem(scene, greenhouseModel);
 
         /* ==============================
@@ -2302,6 +2561,35 @@
             tweenProgress = 0;
             tweenActive = true;
             controls.enabled = false;
+            window.__inverniaFocusTarget = layerKey;
+        }
+
+        function moveCameraToEducationalComponent(component) {
+            const bounds = new THREE.Box3();
+            component.objects.forEach((object) => {
+                object.updateWorldMatrix(true, true);
+                bounds.expandByObject(object);
+            });
+            if (bounds.isEmpty()) return false;
+            const center = component.focusPoint
+                ? greenhouseModel.localToWorld(new THREE.Vector3(...component.focusPoint))
+                : bounds.getCenter(new THREE.Vector3());
+            const size = bounds.getSize(new THREE.Vector3());
+            const direction = new THREE.Vector3(...component.focusDirection).normalize();
+            const verticalFov = THREE.MathUtils.degToRad(camera.fov);
+            const distanceForHeight = size.y / (2 * Math.tan(verticalFov / 2));
+            const distanceForWidth = size.x / (2 * Math.tan(verticalFov / 2) * camera.aspect);
+            const distanceForDepth = size.z / (2 * Math.tan(verticalFov / 2));
+            const distance = component.focusDistance || Math.max(distanceForHeight, distanceForWidth, distanceForDepth, 0.8) * 1.55 + 0.6;
+            tweenStartPos.copy(camera.position);
+            tweenEndPos.copy(center).addScaledVector(direction, distance);
+            tweenStartTarget.copy(controls.target);
+            tweenEndTarget.copy(center);
+            tweenProgress = 0;
+            tweenActive = true;
+            controls.enabled = false;
+            window.__inverniaFocusTarget = component.id;
+            return true;
         }
 
         function updateCameraTween(dt) {
@@ -2318,6 +2606,14 @@
             controls.update();
         }
 
+        window.__inverniaCameraSnapshot = () => ({
+            position: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
+            target: { x: controls.target.x, y: controls.target.y, z: controls.target.z },
+            tweenActive,
+            focusTarget: window.__inverniaFocusTarget || null,
+            highlightVisible: educationalHighlight.visible
+        });
+
         /* ==============================
            INTERFAZ DE USUARIO
         ============================== */
@@ -2327,6 +2623,11 @@
         const layerDesc = document.getElementById('layerDesc');
         const layerElements = document.getElementById('layerElements');
         const navBtns = document.querySelectorAll('.nav-btn');
+        const quickActions = document.querySelectorAll('.quick-action');
+        const explorerPanel = document.getElementById('explorerPanel');
+        const explorerList = document.getElementById('explorerList');
+        const explorerClose = document.getElementById('explorerClose');
+        const tourStatus = document.getElementById('tourStatus');
         const monitorPanel = document.getElementById('monitorPanel');
         const layerInfoDrawer = document.getElementById('layerInfoDrawer');
         const dashboardDrawerToggle = document.getElementById('dashboardDrawerToggle');
@@ -2430,23 +2731,249 @@
             });
         }
 
+        function setQuickActionState(actionName) {
+            quickActions.forEach((button) => {
+                button.classList.toggle('active', button.dataset.action === actionName);
+            });
+        }
+
+        const explorerCategories = [
+            { id: 'greenhouse', title: 'INVERNADERO', componentIds: ['structure', 'agrofilm', 'insectMesh', 'ridgeVent', 'lateralVent', 'antechamber'] },
+            { id: 'crops', title: 'CULTIVOS', componentIds: ['beds', 'crops', ...Array.from({ length: 6 }, (_, index) => `bedC${index + 1}`)] },
+            { id: 'irrigation', title: 'RIEGO', componentIds: ['waterEntry', 'irrigationFilter', 'irrigationValve', 'irrigationCollector', 'dripLines', 'purges', 'biolPoint'] },
+            { id: 'iot', title: 'IoT', componentIds: ['esp32A', 'esp32B', 'esp32C', 'stationA', 'stationB', 'stationC', ...Array.from({ length: 6 }, (_, index) => `soilC${index + 1}`), 'phSensor'] },
+            { id: 'connectivity', title: 'CONECTIVIDAD', componentIds: ['accessPoint', 'satelliteAntenna', 'connectivityArchitecture'] }
+        ];
+        const categoryLabels = Object.fromEntries(explorerCategories.map(({ id, title }) => [id, title]));
+        const componentCard = document.getElementById('componentCard');
+        const componentDetails = document.getElementById('componentDetails');
+        const componentDescription = document.getElementById('componentDescription');
+        const componentAssociatedButton = document.querySelector('[data-component-action="associated"]');
+        let selectedEducationalComponent = null;
+        let tourStepIndex = -1;
+        const tourSteps = [
+            { componentId: 'overview', label: 'INVERNADERO HORTÍCOLA — 300 m²' },
+            { componentId: 'structure', label: 'ESTRUCTURA GALVANIZADA' },
+            { componentId: 'agrofilm', label: 'AGROFILM' },
+            { componentId: 'insectMesh', label: 'MALLA ANTIÁFIDO' },
+            { componentId: 'ventilation', label: 'VENTILACIÓN CENITAL + LATERAL' },
+            { componentId: 'crops', label: 'PRODUCCIÓN HORTÍCOLA' },
+            { componentId: 'irrigationSystem', label: 'RIEGO POR GOTEO' },
+            { componentId: 'antechamber', label: 'ANTECÁMARA · DOBLE ACCESO' },
+            { componentId: 'iotArchitecture', label: 'ARQUITECTURA IoT' },
+            { componentId: 'connectivityArchitecture', label: 'CONECTIVIDAD SATELITAL' },
+            { componentId: 'overview', label: 'INVERNIA · GENERAL' }
+        ];
+
+        function restoreEducationalHighlight() {
+            educationalHighlight.visible = false;
+        }
+
+        function highlightEducationalObjects(objects) {
+            restoreEducationalHighlight();
+            const bounds = new THREE.Box3();
+            objects.filter(Boolean).forEach((root) => {
+                root.updateWorldMatrix(true, true);
+                bounds.expandByObject(root);
+            });
+            if (bounds.isEmpty()) return;
+            educationalHighlight.box.copy(bounds);
+            educationalHighlight.visible = true;
+        }
+
+        function getEducationalDevice(component) {
+            return component.objects.length === 1 ? component.objects[0]?.userData?.iotDevice : null;
+        }
+
+        function readEducationalDetails(component) {
+            const rows = [];
+            if (component.material) rows.push(['Material', component.material]);
+            if (component.specification) rows.push(['Espesor', component.specification]);
+            if (component.bedId) rows.push(['Camellón', component.bedId]);
+            const device = getEducationalDevice(component);
+            if (device) {
+                rows.push(['Zona', device.zone === 'SERVICIO' ? 'Punto de servicio' : `Zona ${device.zone}`]);
+                rows.push(['Función', device.type === 'controller' ? 'Adquisición y comunicación local de sensores asociados' : device.description]);
+                if (device.camellon) rows.push(['Camellón', device.camellon]);
+                const readings = getDeviceReadings(device);
+                if (readings.length) {
+                    rows.push(['Lecturas', readings.map((reading) => {
+                        const value = typeof reading.value === 'number' && Number.isFinite(reading.value)
+                            ? reading.value.toFixed(reading.variable === 'ph' ? 2 : 1)
+                            : 'Sin datos';
+                        return `${reading.label}: ${value} ${reading.unit}`.trim();
+                    }).join(' · ')]);
+                }
+                rows.push(['Estado', getDeviceVisualStatus(device, readings)]);
+            }
+            return rows;
+        }
+
+        function renderComponentCard(component) {
+            document.getElementById('componentCategory').textContent = categoryLabels[component.category] || 'GENERAL';
+            document.getElementById('componentName').textContent = component.name;
+            componentDescription.textContent = component.description;
+            componentDetails.replaceChildren(...readEducationalDetails(component).flatMap(([label, value]) => {
+                const term = document.createElement('dt');
+                term.textContent = label;
+                const detail = document.createElement('dd');
+                detail.textContent = value;
+                return [term, detail];
+            }));
+            const device = getEducationalDevice(component);
+            componentAssociatedButton.hidden = device?.type !== 'controller';
+            componentCard.hidden = false;
+            document.getElementById('iotDeviceCard').hidden = true;
+        }
+
+        function focusSelectedEducationalComponent() {
+            if (!selectedEducationalComponent) return;
+            if (selectedEducationalComponent.id === 'overview') {
+                moveCameraTo('overview');
+                setActiveButton('overview');
+                window.__inverniaFocusTarget = 'overview';
+            } else {
+                moveCameraToEducationalComponent(selectedEducationalComponent);
+            }
+        }
+
+        function showEducationalComponent(componentId, options = {}) {
+            const component = educationalComponents[componentId];
+            if (!component) return false;
+            restoreEducationalHighlight();
+            if (selectedIoTDevice) clearIoTSelection();
+            selectedEducationalComponent = component;
+            const device = getEducationalDevice(component);
+            if (device) {
+                selectIoTDevice(component.objects[0], { includeAssociated: false });
+                const zone = ['A', 'B', 'C'].includes(device.zone) ? device.zone : 'GENERAL';
+                if (selectedZone !== zone) setDashboardZone(zone);
+            } else if (component.bedId) {
+                greenhouseModel.userData.setBedHighlight(component.bedId);
+            }
+            if (component.id === 'overview') setDashboardZone('GENERAL');
+            if (component.id !== 'overview') highlightEducationalObjects(component.objects);
+            renderComponentCard(component);
+            if (options.focus === true) focusSelectedEducationalComponent();
+            window.__inverniaSelectedComponent = component.id;
+            return true;
+        }
+
+        function clearEducationalSelection() {
+            restoreEducationalHighlight();
+            selectedEducationalComponent = null;
+            window.__inverniaSelectedComponent = null;
+            componentCard.hidden = true;
+            if (selectedIoTDevice) clearIoTSelection();
+        }
+
+        function renderExplorerItems() {
+            explorerList.replaceChildren(...explorerCategories.map((category) => {
+                const details = document.createElement('details');
+                details.className = 'explorer-category';
+                details.dataset.category = category.id;
+                const summary = document.createElement('summary');
+                summary.textContent = category.title;
+                const list = document.createElement('div');
+                list.className = 'explorer-list';
+                category.componentIds.forEach((componentId) => {
+                    const component = educationalComponents[componentId];
+                    if (!component) return;
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'explorer-item';
+                    button.dataset.componentId = component.id;
+                    button.innerHTML = `<strong>${component.name}</strong><span>${component.description}</span>`;
+                    button.addEventListener('click', () => showEducationalComponent(component.id));
+                    list.appendChild(button);
+                });
+                details.append(summary, list);
+                return details;
+            }));
+            window.__inverniaEducationalCount = explorerCategories.reduce((sum, category) =>
+                sum + category.componentIds.filter((id) => educationalComponents[id]).length, 0);
+        }
+
+        function toggleExplorerPanel(forceOpen) {
+            const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : explorerPanel.classList.contains('hidden');
+            explorerPanel.classList.toggle('hidden', !shouldOpen);
+            setQuickActionState(shouldOpen ? 'explore' : null);
+        }
+
+        function showTourStep(index) {
+            tourStepIndex = Math.max(0, Math.min(index, tourSteps.length - 1));
+            const step = tourSteps[tourStepIndex];
+            showEducationalComponent(step.componentId, { focus: true });
+            tourStatus.textContent = `${tourStepIndex + 1}/11 · ${step.label}`;
+            tourStatus.hidden = false;
+            document.getElementById('tourControls').hidden = false;
+            document.querySelector('[data-tour-action="previous"]').disabled = tourStepIndex === 0;
+            document.querySelector('[data-tour-action="next"]').disabled = tourStepIndex === tourSteps.length - 1;
+            setQuickActionState('tour');
+        }
+
+        function exitGuidedTour(returnToGeneral = true) {
+            tourStepIndex = -1;
+            tourStatus.hidden = true;
+            document.getElementById('tourControls').hidden = true;
+            setQuickActionState(null);
+            if (returnToGeneral) {
+                clearEducationalSelection();
+                applyLayerView('overview', { keepDrawer: false });
+                closeLeftDrawer();
+            }
+        }
+
+        function runGuidedTour() {
+            toggleExplorerPanel(true);
+            showTourStep(0);
+        }
+
         let currentLayer = 'overview';
         showLayerInfo(currentLayer);
         updateDrawerButtons();
+        renderExplorerItems();
+
+        explorerClose.addEventListener('click', () => toggleExplorerPanel(false));
+        document.getElementById('componentClose').addEventListener('click', clearEducationalSelection);
+        document.querySelector('[data-component-action="close"]').addEventListener('click', clearEducationalSelection);
+        document.querySelector('[data-component-action="focus"]').addEventListener('click', focusSelectedEducationalComponent);
+        componentAssociatedButton.addEventListener('click', () => {
+            const device = selectedEducationalComponent ? getEducationalDevice(selectedEducationalComponent) : null;
+            if (!device || device.type !== 'controller') return;
+            const associatedRoots = (device.associatedDeviceIds || []).map((id) => iotRootsById.get(id)).filter(Boolean);
+            highlightEducationalObjects([selectedEducationalComponent.objects[0], ...associatedRoots]);
+            selectIoTDevice(selectedEducationalComponent.objects[0], { includeAssociated: true });
+            renderComponentCard(selectedEducationalComponent);
+            componentDescription.textContent = `${selectedEducationalComponent.description} Sensores asociados resaltados: ${associatedRoots.map((root) => root.userData.iotDevice.name).join(', ')}.`;
+        });
+        document.querySelector('[data-tour-action="previous"]').addEventListener('click', () => showTourStep(tourStepIndex - 1));
+        document.querySelector('[data-tour-action="next"]').addEventListener('click', () => showTourStep(tourStepIndex + 1));
+        document.querySelector('[data-tour-action="exit"]').addEventListener('click', () => exitGuidedTour(true));
 
         navBtns.forEach(btn => {
             btn.addEventListener('click', () => {
                 const layer = btn.dataset.layer;
-                if (layer === currentLayer && !tweenActive) {
+                const layerView = cameraViews[layer];
+                const cameraMovedFromLayerView = layerView && (
+                    camera.position.distanceTo(new THREE.Vector3(...layerView.pos)) > 0.1
+                    || controls.target.distanceTo(new THREE.Vector3(...layerView.target)) > 0.1
+                );
+                const focusedEducationalComponent = Boolean(selectedEducationalComponent || selectedIoTDevice)
+                    || window.__inverniaFocusTarget !== layer
+                    || cameraMovedFromLayerView;
+                if (tourStepIndex >= 0) exitGuidedTour(false);
+                if (layer === currentLayer && !tweenActive && !focusedEducationalComponent) {
                     openLeftDrawer('layer');
                     return;
                 }
-                if (selectedIoTDevice) clearIoTSelection();
+                clearEducationalSelection();
                 currentLayer = layer;
                 setActiveButton(layer);
                 moveCameraTo(layer);
                 showLayerInfo(layer);
                 openLeftDrawer('layer');
+                setQuickActionState(null);
             });
         });
 
@@ -2563,6 +3090,9 @@
             if (source) source.textContent = `FUENTE: ${dataSource === 'physical' ? 'DISPOSITIVO IoT' : 'SIMULACIÓN'}`;
             renderIoTZoneSummary();
             if (selectedIoTDevice) renderIoTDeviceCard(selectedIoTDevice);
+            if (selectedEducationalComponent && getEducationalDevice(selectedEducationalComponent)) {
+                renderComponentCard(selectedEducationalComponent);
+            }
             renderDashboardControls();
         }
 
@@ -2602,6 +3132,7 @@
         function getDeviceVisualStatus(device, readings) {
             const suppliedStatus = backendDevices.visualStatuses?.[device.id];
             if (['NORMAL', 'ADVERTENCIA', 'CRÍTICO', 'SIN DATOS'].includes(suppliedStatus)) return suppliedStatus;
+            if (device.type === 'controller' && simModeSelect.value === 'sim') return 'NORMAL';
             if (!readings.length || readings.some((reading) => typeof reading.value !== 'number' || !Number.isFinite(reading.value))) {
                 return 'SIN DATOS';
             }
@@ -2614,6 +3145,8 @@
             let state = {};
             if (simModeSelect.value === 'sim') {
                 if (device.type === 'environmental_station' && ['A', 'B', 'C'].includes(device.zone)) {
+                    state = measurementsForZone(device.zone);
+                } else if (device.type === 'soil_moisture_sensor' && ['A', 'B', 'C'].includes(device.zone)) {
                     state = measurementsForZone(device.zone);
                 } else if (device.type === 'ph_sensor') {
                     state = { ph: sim.ph };
@@ -2703,7 +3236,7 @@
             document.getElementById('iotDeviceSource').textContent = simModeSelect.value === 'sim'
                 ? 'SIMULACIÓN LOCAL'
                 : (backendConnected ? 'BACKEND' : 'SIN DATOS DISPONIBLES');
-            document.getElementById('iotDeviceCard').hidden = false;
+            document.getElementById('iotDeviceCard').hidden = Boolean(selectedEducationalComponent);
         }
 
         function highlightDashboardVariables(variables, primaryVariable = null) {
@@ -2745,13 +3278,13 @@
             marker.visible = true;
         }
 
-        function selectIoTDevice(deviceRoot) {
+        function selectIoTDevice(deviceRoot, { includeAssociated = true } = {}) {
             closeRightDrawer();
             selectedIoTDevice = deviceRoot;
             infoPanel.classList.add('hidden');
             iotSelectionMarkers.forEach((marker) => { marker.visible = false; });
             const metadata = deviceRoot.userData.iotDevice;
-            const associatedRoots = (metadata.associatedDeviceIds || [])
+            const associatedRoots = (includeAssociated ? metadata.associatedDeviceIds || [] : [])
                 .map((id) => iotRootsById.get(id))
                 .filter(Boolean);
             [deviceRoot, ...associatedRoots].slice(0, iotSelectionMarkers.length).forEach((root, index) => {
@@ -2787,15 +3320,18 @@
                 iotRaycaster.setFromCamera(iotPointer, camera);
                 const deviceHit = iotRaycaster.intersectObjects(iotArchitecture.pickTargets, false)[0];
                 if (deviceHit?.object.userData.iotRoot) {
+                    clearEducationalSelection();
                     selectIoTDevice(deviceHit.object.userData.iotRoot);
                     return;
                 }
                 const zoneHit = iotRaycaster.intersectObjects(iotZoneTargets, false)[0];
                 if (zoneHit?.object.userData.iotZone) {
+                    clearEducationalSelection();
                     clearIoTSelection();
                     setDashboardZone(zoneHit.object.userData.iotZone);
                     return;
                 }
+                clearEducationalSelection();
                 clearIoTSelection();
                 setDashboardZone('GENERAL');
             });
@@ -2820,6 +3356,31 @@
         });
         installIoTSelection();
 
+        function applyLayerView(layerKey, options = {}) {
+            const { keepDrawer = true } = options;
+            if (selectedEducationalComponent) clearEducationalSelection();
+            else if (selectedIoTDevice) clearIoTSelection();
+            currentLayer = layerKey;
+            setActiveButton(layerKey);
+            setQuickActionState(null);
+            moveCameraTo(layerKey);
+            showLayerInfo(layerKey);
+            if (keepDrawer) openLeftDrawer('layer');
+        }
+
+        quickActions.forEach((button) => {
+            button.addEventListener('click', () => {
+                const action = button.dataset.action;
+                if (action === 'tour') {
+                    runGuidedTour();
+                    return;
+                }
+                if (action === 'explore') {
+                    toggleExplorerPanel();
+                    return;
+                }
+            });
+        });
 
         // ==============================
         // Controles de simulación de clima (tiempo real / acelerado)
@@ -2853,10 +3414,12 @@
         simModeSelect.style.borderRadius = '8px';
         simModeSelect.style.padding = '8px 10px';
         simModeSelect.innerHTML = `
-          <option value="backend" selected>Backend (Supabase)</option>
-          <option value="sim">Simulación local</option>
+          <option value="sim" selected>Simulación local</option>
+          <option value="backend">Backend (Supabase)</option>
         `;
         simControls.appendChild(simModeSelect);
+
+        simModeSelect.value = 'sim';
 
         const simSpeedLabel = document.createElement('span');
         simSpeedLabel.textContent = '×';
@@ -2982,7 +3545,7 @@
             ph: 6.2,
             aire: false,
             riego: false,
-            modoAutomatico: true,
+            modoAutomatico: false,
             modoCalor: false,
             modoSeco: false,
             tempMin: 14,
