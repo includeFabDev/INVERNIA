@@ -635,6 +635,49 @@
             line-height: 1.6;
         }
 
+        .test-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+        .test-field { display: grid; gap: 4px; min-width: 0; }
+        .test-field label { color: var(--muted); font-size: 9px; font-weight: 700; }
+        .test-field select {
+            width: 100%;
+            min-width: 0;
+            padding: 7px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: #101810;
+            color: var(--fg);
+            font: 10px 'Space Grotesk', sans-serif;
+        }
+        .test-mode-selector { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+        .test-mode-selector button,
+        .test-action {
+            min-height: 32px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--fg);
+            font: 600 10px 'Space Grotesk', sans-serif;
+            cursor: pointer;
+        }
+        .test-mode-selector button[aria-pressed="true"] { border-color: rgba(46, 204, 113, 0.5); color: #baf4ce; }
+        .test-mode-selector button:disabled,
+        .test-action:disabled { cursor: not-allowed; opacity: 0.45; }
+        .test-actions { display: flex; gap: 6px; margin-top: 8px; }
+        .test-action { flex: 1; }
+        .test-action.primary { border-color: rgba(46, 204, 113, 0.5); background: rgba(46, 204, 113, 0.13); }
+        .test-status { min-height: 14px; margin-top: 6px; color: var(--muted); font-size: 9px; }
+        .test-timeline { display: grid; gap: 6px; max-height: 132px; overflow-y: auto; list-style: none; }
+        .test-timeline li { display: grid; grid-template-columns: 38px 14px minmax(0, 1fr); gap: 5px; color: #c6d2c8; font-size: 9px; line-height: 1.4; }
+        .test-event-time { color: var(--muted); font-variant-numeric: tabular-nums; }
+        .test-result[hidden] { display: none; }
+        .test-result { padding-top: 8px; border-top: 1px solid var(--border); }
+        .test-result-heading { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; font-weight: 700; }
+        .test-result[data-result="pass"] .test-result-heading { color: #76e6a2; }
+        .test-result[data-result="fail"] .test-result-heading { color: #f07c71; }
+        .test-result dl { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; margin-top: 7px; font-size: 9px; }
+        .test-result dt { color: var(--muted); }
+        .test-result dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+
         .history-heading select {
             max-width: 58%;
             padding: 6px 8px;
@@ -962,6 +1005,58 @@
             <div class="section-label">REGLAS AUTOMÁTICAS</div>
             <div class="rules-copy">Temperatura ≥ 30 °C → ventilación ON<br>Temperatura ≤ 27 °C → ventilación OFF<br>Suelo ≤ 35 % → riego ON<br>Suelo ≥ 60 % → riego OFF</div>
         </section>
+        <section class="dashboard-section" aria-label="Centro de pruebas">
+            <div class="section-label">CENTRO DE PRUEBAS</div>
+            <div class="test-fields">
+                <div class="test-field">
+                    <label for="testScenario">ESCENARIO</label>
+                    <select id="testScenario">
+                        <option value="CALOR_EXTREMO">Calor extremo</option>
+                        <option value="SEQUIA">Sequía</option>
+                        <option value="LLUVIA">Lluvia</option>
+                        <option value="INUNDACION">Inundación</option>
+                        <option value="FRIO">Frío</option>
+                        <option value="FRIO_INTENSO2">Frío intenso 2</option>
+                        <option value="DIA_NUBLADO">Día nublado</option>
+                    </select>
+                </div>
+                <div class="test-field">
+                    <label for="testZone">ZONA</label>
+                    <select id="testZone"><option value="A">Zona A</option><option value="B">Zona B</option><option value="C">Zona C</option></select>
+                </div>
+                <div class="test-field">
+                    <label>MODO</label>
+                    <div class="test-mode-selector" role="group" aria-label="Modo de prueba">
+                        <button type="button" data-test-mode="manual" aria-pressed="false">Manual</button>
+                        <button type="button" data-test-mode="automatic" aria-pressed="true">Automático</button>
+                    </div>
+                </div>
+                <div class="test-field">
+                    <label for="testSpeed">VELOCIDAD</label>
+                    <select id="testSpeed"><option value="1">x1</option><option value="10">x10</option><option value="60">x60</option></select>
+                </div>
+            </div>
+            <div class="test-actions">
+                <button class="test-action primary" id="testStart" type="button"><i class="fa-solid fa-play" aria-hidden="true"></i> Iniciar prueba</button>
+                <button class="test-action" id="testStop" type="button" disabled><i class="fa-solid fa-stop" aria-hidden="true"></i> Finalizar</button>
+            </div>
+            <p class="test-status" id="testStatus" aria-live="polite">Lista para ejecutar</p>
+            <div class="test-result" id="testResult" hidden aria-live="polite">
+                <div class="test-result-heading"><span>PRUEBA FINALIZADA</span><span id="testOutcome"></span></div>
+                <dl>
+                    <dt>Escenario / modo</dt><dd id="testSummary"></dd>
+                    <dt>Temperatura máxima</dt><dd id="testMaxTemp"></dd>
+                    <dt>Humedad mínima del suelo</dt><dd id="testMinSoil"></dd>
+                    <dt>Nivel máximo de inundación</dt><dd id="testMaxFlood"></dd>
+                    <dt>Actuador requerido</dt><dd id="testActuator"></dd>
+                    <dt>Nivel máximo de inundación</dt><dd id="testMaxFlood"></dd>
+                    <dt>Recuperación</dt><dd id="testRecovery"></dd>
+                    <dt>Eventos</dt><dd id="testEventCount"></dd>
+                </dl>
+            </div>
+            <div class="section-label" style="margin-top:10px">TIMELINE</div>
+            <ol class="test-timeline" id="testTimeline" aria-live="polite"></ol>
+        </section>
         <section class="dashboard-section" aria-label="Historial temporal">
             <div class="history-heading">
                 <div class="section-label">HISTORIAL</div>
@@ -1272,6 +1367,44 @@
             rain.visible = false;
             scene.add(rain);
 
+            const floodGroup = new THREE.Group();
+            const floodVolume = new THREE.Mesh(
+                new THREE.BoxGeometry(9.5, 1, 29.3),
+                new THREE.MeshPhysicalMaterial({
+                    color: 0x2184a3,
+                    transparent: true,
+                    opacity: 0.28,
+                    roughness: 0.22,
+                    metalness: 0.08,
+                    depthWrite: false
+                })
+            );
+            floodVolume.scale.y = 0.001;
+            floodVolume.position.y = -0.019;
+            floodVolume.visible = false;
+            floodGroup.add(floodVolume);
+
+            const floodSurfaceGeometry = new THREE.PlaneGeometry(9.48, 29.28, 28, 88);
+            floodSurfaceGeometry.rotateX(-Math.PI / 2);
+            const floodSurface = new THREE.Mesh(
+                floodSurfaceGeometry,
+                new THREE.MeshPhysicalMaterial({
+                    color: 0x43c5df,
+                    transparent: true,
+                    opacity: 0.64,
+                    roughness: 0.16,
+                    metalness: 0.12,
+                    clearcoat: 0.8,
+                    depthWrite: false,
+                    side: THREE.DoubleSide
+                })
+            );
+            floodSurface.position.y = -0.018;
+            floodSurface.visible = false;
+            floodGroup.add(floodSurface);
+            scene.add(floodGroup);
+            let floodRippleTime = 0;
+
             function updateSoilVisuals(soilMoisture) {
                 const beds = greenhouseModel.userData?.bedMeshes || [];
                 if (!beds.length) return;
@@ -1288,15 +1421,16 @@
                 });
             }
 
-            function updateEnvironmentVisuals({ simulatedMinutes, scenario, temperature, humidity, soilMoisture, lux, irrigationOn, ventilationOn, dt }) {
+            function updateEnvironmentVisuals({ simulatedMinutes, scenario, temperature, humidity, soilMoisture, lux, irrigationOn, ventilationOn, floodLevel, dt }) {
                 const minutes = Number(simulatedMinutes) || 0;
                 const phase = (minutes % 1440) / 1440;
                 const solarAngle = phase * Math.PI * 2 - Math.PI / 2;
                 const daylightFactor = clamp((Math.sin(solarAngle) + 1) / 2, 0, 1);
                 const nightFactor = 1 - daylightFactor;
-                const rainScenario = scenario === 'LLUVIA';
+                const floodScenario = scenario === 'INUNDACION';
+                const rainScenario = scenario === 'LLUVIA' || floodScenario;
                 const overcastScenario = scenario === 'DIA_NUBLADO';
-                const coldScenario = scenario === 'FRIO_INTENSO';
+                const coldScenario = scenario === 'FRIO' || scenario === 'FRIO_INTENSO2';
                 const heatScenario = scenario === 'CALOR_EXTREMO';
 
                 const dayColor = new THREE.Color(0x8cc7ff);
@@ -1317,7 +1451,7 @@
                 scene.background = skyBase.clone();
                 if (scene.fog) {
                     scene.fog.color.copy(skyBase);
-                    scene.fog.density = rainScenario ? 0.02 : overcastScenario ? 0.015 : 0.012;
+                    scene.fog.density = floodScenario ? 0.024 : rainScenario ? 0.02 : overcastScenario ? 0.015 : 0.012;
                 }
 
                 const sunVisibility = daylightFactor > 0.08 && !rainScenario;
@@ -1338,7 +1472,7 @@
                 const moonY = Math.sin(moonPhase) * 11 + 11;
                 moonGroup.position.set(moonX, moonY, 20);
 
-                const cloudOpacityTarget = rainScenario ? 0.9 : overcastScenario ? 0.72 : heatScenario ? 0.25 : coldScenario ? 0.52 : 0.28;
+                const cloudOpacityTarget = floodScenario ? 0.96 : rainScenario ? 0.9 : overcastScenario ? 0.72 : heatScenario ? 0.25 : coldScenario ? 0.52 : 0.28;
                 const rainVisible = rainScenario;
                 rain.visible = rainVisible;
                 if (rainVisible) {
@@ -1353,6 +1487,29 @@
                     }
                     rain.geometry.attributes.position.needsUpdate = true;
                 }
+
+                floodRippleTime += dt || 0.016;
+                const targetWaterLevel = floodScenario ? clamp(Number(floodLevel) || 0, 0, 0.55) : 0;
+                const currentWaterLevel = floodVolume.scale.y;
+                const waterLevel = currentWaterLevel + (targetWaterLevel - currentWaterLevel)
+                    * clamp((dt || 0.016) * 0.12, 0, 1);
+                floodVolume.scale.y = Math.max(0.001, waterLevel);
+                floodVolume.position.y = (waterLevel / 2) - 0.018;
+                floodSurface.position.y = waterLevel - 0.016;
+                const waterVisible = waterLevel > 0.008;
+                floodVolume.visible = waterVisible;
+                floodSurface.visible = waterVisible;
+                const waterPositions = floodSurfaceGeometry.attributes.position;
+                for (let vertex = 0; vertex < waterPositions.count; vertex++) {
+                    const x = waterPositions.getX(vertex);
+                    const z = waterPositions.getZ(vertex);
+                    waterPositions.setY(vertex,
+                        Math.sin((x * 0.8) + floodRippleTime * 1.8) * 0.009
+                        + Math.sin((z * 0.48) - floodRippleTime * 1.25) * 0.008
+                    );
+                }
+                waterPositions.needsUpdate = true;
+                floodSurfaceGeometry.computeVertexNormals();
 
                 clouds.forEach((cloud, index) => {
                     cloud.position.x += (cloud.userData.speed || 0.1) * (dt || 0.016) * 2;
@@ -2731,6 +2888,7 @@
         simControls.appendChild(simScenarioLabel);
 
         const simScenarioSelect = document.createElement('select');
+        simScenarioSelect.id = 'simScenarioSelect';
         simScenarioSelect.style.background = 'rgba(12,20,12,0.75)';
         simScenarioSelect.style.color = '#e8efe8';
         simScenarioSelect.style.border = '1px solid rgba(255,255,255,0.12)';
@@ -2741,7 +2899,9 @@
           <option value="CALOR_EXTREMO">CALOR EXTREMO</option>
           <option value="SEQUIA">SEQUÍA</option>
           <option value="LLUVIA">LLUVIA</option>
-          <option value="FRIO_INTENSO">FRÍO INTENSO</option>
+          <option value="INUNDACION">INUNDACIÓN</option>
+          <option value="FRIO">FRÍO</option>
+          <option value="FRIO_INTENSO2">FRÍO INTENSO 2</option>
           <option value="DIA_NUBLADO">DÍA NUBLADO</option>
         `;
         simControls.appendChild(simScenarioSelect);
@@ -2787,8 +2947,18 @@
                 tempBias: -5, humBias: 18, soilBias: 0, luxBias: 0.72, co2Bias: -80, phBias: -0.04,
                 tempOn: 29, tempOff: 24, soilOn: 42, soilOff: 62, weatherMode: 'wet'
             },
-            FRIO_INTENSO: {
-                label: 'FRÍO INTENSO', description: 'Baja temperatura y humedad más baja.',
+            INUNDACION: {
+                label: 'INUNDACIÓN', description: 'El nivel del agua sube sobre el suelo del invernadero.',
+                tempBias: -4, humBias: 20, soilBias: 24, luxBias: 0.58, co2Bias: -60, phBias: -0.06,
+                tempOn: 29, tempOff: 24, soilOn: 30, soilOff: 55, weatherMode: 'flood'
+            },
+            FRIO: {
+                label: 'FRÍO', description: 'Descenso moderado de temperatura.',
+                tempBias: -5, humBias: -3, soilBias: -3, luxBias: 0.92, co2Bias: -20, phBias: -0.02,
+                tempOn: 27, tempOff: 23, soilOn: 35, soilOff: 58, weatherMode: 'cold'
+            },
+            FRIO_INTENSO2: {
+                label: 'FRÍO INTENSO 2', description: 'Descenso intenso de temperatura y humedad.',
                 tempBias: -9, humBias: -8, soilBias: -6, luxBias: 0.85, co2Bias: -40, phBias: -0.05,
                 tempOn: 26, tempOff: 22, soilOn: 35, soilOff: 58, weatherMode: 'cold'
             },
@@ -2806,6 +2976,7 @@
             temp_c: 27,
             hum_pct: 68,
             soil_pct: 58,
+            floodLevel: 0,
             lux: 0,
             co2_ppm: 650,
             ph: 6.2,
@@ -2819,7 +2990,7 @@
             humMin: 45,
             humMax: 85,
             scenario: 'NORMAL',
-            eventState: { heat: false, drought: false, rain: false, cold: false },
+            eventState: { heat: false, drought: false, rain: false, cold: false, cloudy: false, flood: false },
             eventLog: [],
             humRiegoOnBelow: 50,
             humRiegoOffAbove: 60,
@@ -2839,10 +3010,221 @@
             return climateScenarios[sim.scenario] || climateScenarios.NORMAL;
         }
 
+        const testScenarioSelect = document.getElementById('testScenario');
+        const testZoneSelect = document.getElementById('testZone');
+        const testSpeedSelect = document.getElementById('testSpeed');
+        const testTimeline = document.getElementById('testTimeline');
+        let testMode = 'automatic';
+        let testRun = null;
+        let eventsApiUnavailable = false;
+
+        function renderTestTimeline() {
+            const icons = {
+                test_started: '🧪', test_completed: '✅', test_failed: '❌', scenario_started: '🌦️',
+                temperature_high: '🔥', soil_moisture_low: '⚠️', humidity_high: '💧',
+                temperature_low: '❄️', low_light: '☁️', recovery: '✅',
+                ventilation_on: '🌬️', ventilation_off: '🌬️', irrigation_on: '💧', irrigation_off: '💧'
+            };
+            testTimeline.replaceChildren(...testRun.events.map((event) => {
+                const item = document.createElement('li');
+                const time = document.createElement('time');
+                time.className = 'test-event-time';
+                time.dateTime = event.created_at;
+                time.textContent = new Date(event.created_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const icon = document.createElement('span');
+                icon.textContent = icons[event.event_type] || '•';
+                const message = document.createElement('span');
+                message.textContent = event.message;
+                item.append(time, icon, message);
+                return item;
+            }));
+            testTimeline.scrollTop = testTimeline.scrollHeight;
+        }
+
+        function recordTestEvent(eventType, message, severity = 'info') {
+            const run = testRun;
+            if (!run) return;
+            const event = {
+                event_type: eventType,
+                created_at: new Date().toISOString(),
+                zone: run.zone,
+                severity,
+                message,
+                metadata: { run_id: run.id, scenario: run.scenario, mode: run.mode, speed: run.speed }
+            };
+            run.events.push(event);
+            renderTestTimeline();
+            run.pendingWrites = run.pendingWrites.then(async () => {
+                if (eventsApiUnavailable) return;
+                const response = await fetch('/api/events', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        runId: run.id,
+                        eventType,
+                        message,
+                        severity,
+                        zone: run.zone,
+                        metadata: { scenario: run.scenario, mode: run.mode, speed: run.speed }
+                    })
+                });
+                if (!response.ok) {
+                    eventsApiUnavailable = true;
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                run.persistedCount += 1;
+            }).catch(() => { run.persistFailures += 1; });
+        }
+
+        async function finishTest(passed, reason) {
+            const run = testRun;
+            if (!run || run.finished) return;
+            const expectedActuator = run.scenario === 'CALOR_EXTREMO' ? 'Ventilación'
+                : run.scenario === 'SEQUIA' ? 'Riego' : null;
+            const finalPass = passed && (!expectedActuator || run.actuatorActivated);
+            const finalReason = passed && !finalPass ? `FAIL · ${expectedActuator} no se activó` : reason;
+            recordTestEvent(finalPass ? 'test_completed' : 'test_failed', finalReason, finalPass ? 'info' : 'warning');
+            run.finished = true;
+            document.getElementById('testStart').disabled = false;
+            document.getElementById('testStop').disabled = true;
+            document.querySelectorAll('[data-test-mode], #testScenario, #testZone, #testSpeed, #simScenarioSelect')
+                .forEach((control) => { control.disabled = false; });
+            document.getElementById('testStatus').textContent = finalReason;
+
+            document.getElementById('testResult').hidden = false;
+            document.getElementById('testResult').dataset.result = finalPass ? 'pass' : 'fail';
+            document.getElementById('testOutcome').textContent = finalPass ? 'PASS' : 'FAIL';
+            document.getElementById('testSummary').textContent = `${climateScenarios[run.scenario].label} · ${run.mode === 'automatic' ? 'Automático' : 'Manual'} · Zona ${run.zone}`;
+            document.getElementById('testMaxTemp').textContent = `${run.maxTemperature.toFixed(1)} °C`;
+            document.getElementById('testMinSoil').textContent = `${run.minSoil.toFixed(1)} %`;
+            document.getElementById('testActuator').textContent = expectedActuator
+                ? `${expectedActuator}: ${run.actuatorActivated ? 'Activado' : 'No activado'}`
+                : 'No requerido';
+            const recoveryUnit = run.scenario === 'SEQUIA' ? '% suelo'
+                : run.scenario === 'LLUVIA' ? '% humedad'
+                    : run.scenario === 'DIA_NUBLADO' ? 'lux' : '°C';
+            document.getElementById('testRecovery').textContent = run.recoveryValue === null
+                ? 'Sin recuperación observada'
+                : `${run.recoveryValue.toFixed(1)} ${recoveryUnit}`;
+            document.getElementById('testEventCount').textContent = String(run.events.length);
+            const completionStatus = run.persistedCount
+                ? `${finalPass ? 'Prueba completada' : 'Prueba no superada'} · ${run.persistedCount} eventos guardados`
+                : 'Prueba local completada · API de eventos no disponible';
+            document.getElementById('testStatus').textContent = completionStatus;
+            run.pendingWrites.then(() => {
+                if (testRun?.id !== run.id) return;
+                document.getElementById('testStatus').textContent = run.persistedCount
+                    ? `${finalPass ? 'Prueba completada' : 'Prueba no superada'} · ${run.persistedCount} eventos guardados`
+                    : completionStatus;
+            });
+        }
+
+        document.querySelectorAll('[data-test-mode]').forEach((button) => {
+            button.addEventListener('click', () => {
+                testMode = button.dataset.testMode;
+                document.querySelectorAll('[data-test-mode]').forEach((modeButton) => {
+                    modeButton.setAttribute('aria-pressed', String(modeButton.dataset.testMode === testMode));
+                });
+            });
+        });
+
+        document.getElementById('testStart').addEventListener('click', () => {
+            const scenario = testScenarioSelect.value;
+            const zone = testZoneSelect.value;
+            const speed = Number(testSpeedSelect.value);
+            if (simModeSelect.value !== 'sim') {
+                simModeSelect.value = 'sim';
+                syncLocalSimulationFromBackend();
+                startCronPingerIfBackend();
+            }
+            const profile = climateScenarios[scenario];
+            simSpeedSelect.value = String(speed);
+            sim.minutesOfDay = 13 * 60;
+            sim.aire = false;
+            sim.riego = false;
+            sim.modoAutomatico = testMode === 'automatic';
+            sim.eventState = { heat: false, drought: false, rain: false, cold: false, cloudy: false };
+            sim.eventLog = [];
+            if (scenario === 'CALOR_EXTREMO') sim.temp_c = Math.max(sim.temp_c, profile.tempOn - 1);
+            if (scenario === 'SEQUIA') sim.soil_pct = Math.min(sim.soil_pct, profile.soilOn + 3);
+            if (scenario === 'LLUVIA') sim.hum_pct = 95;
+            if (scenario === 'FRIO') sim.temp_c = 17;
+            if (scenario === 'FRIO_INTENSO2') sim.temp_c = 15;
+            if (scenario === 'DIA_NUBLADO') {
+                sim.minutesOfDay = 13 * 60;
+                sim.lux = 0;
+            }
+            testRun = {
+                id: crypto.randomUUID(), scenario, zone, mode: testMode, speed,
+                startedAt: Date.now(), elapsedVirtualMinutes: 0,
+                maxTemperature: sim.temp_c, minSoil: sim.soil_pct,
+                conditionObserved: false, actuatorActivated: false,
+                recoveryValue: null, events: [], persistedCount: 0,
+                persistFailures: 0, pendingWrites: Promise.resolve(), finished: false
+            };
+            document.getElementById('testResult').hidden = true;
+            document.getElementById('testStart').disabled = true;
+            document.getElementById('testStop').disabled = false;
+            document.querySelectorAll('[data-test-mode], #testScenario, #testZone, #testSpeed, #simScenarioSelect')
+                .forEach((control) => { control.disabled = true; });
+            document.getElementById('testStatus').textContent = `Prueba en curso · ${profile.label} · x${speed}`;
+            setDashboardZone(zone);
+            recordTestEvent('test_started', `Inicio: ${profile.label} · ${testMode === 'automatic' ? 'Automático' : 'Manual'} · Zona ${zone}`);
+            if (scenario === 'FRIO' || scenario === 'FRIO_INTENSO2') {
+                sim.eventState.cold = true;
+                testRun.conditionObserved = true;
+                recordTestEvent('temperature_low', `Condición de frío: ${sim.temp_c.toFixed(1)} °C`, 'warning');
+            }
+            if (scenario === 'DIA_NUBLADO') {
+                sim.eventState.cloudy = true;
+                testRun.conditionObserved = true;
+                recordTestEvent('low_light', 'Radiación solar reducida por día nublado', 'warning');
+            }
+            if (scenario === 'LLUVIA') {
+                sim.eventState.rain = true;
+                testRun.conditionObserved = true;
+                recordTestEvent('humidity_high', 'Humedad elevada por lluvia', 'warning');
+            }
+            setScenario(scenario);
+            renderSensorCards();
+        });
+
+        document.getElementById('testStop').addEventListener('click', () => {
+            const run = testRun;
+            if (!run || run.finished) return;
+            const expectedActuator = run.scenario === 'CALOR_EXTREMO' ? 'Ventilación'
+                : run.scenario === 'SEQUIA' ? 'Riego' : null;
+            const passed = run.conditionObserved && run.recoveryObserved
+                && (!expectedActuator || run.actuatorActivated);
+            finishTest(passed, passed ? 'Prueba detenida · condición y respuesta observadas' : 'Prueba detenida antes de completar la respuesta');
+        });
+
         function pushScenarioEvent(kind, message) {
             const entry = { kind, message, at: minutesToHHMM(sim.minutesOfDay) };
             sim.eventLog.unshift(entry);
             sim.eventLog = sim.eventLog.slice(0, 6);
+            if (testRun && !testRun.finished) {
+                const recoveryMatchesScenario = testRun.scenario === 'CALOR_EXTREMO'
+                    ? message.startsWith('Recuperación térmica')
+                    : testRun.scenario === 'SEQUIA' ? message.startsWith('Suelo recuperado')
+                        : testRun.scenario === 'LLUVIA' ? message.startsWith('Humedad normal')
+                            : testRun.scenario === 'DIA_NUBLADO' ? message.startsWith('Radiación recuperada')
+                                : message.startsWith('Temperatura recuperada');
+                if (kind === 'recovery' && recoveryMatchesScenario) {
+                    testRun.recoveryObserved = true;
+                    testRun.recoveryValue = testRun.scenario === 'SEQUIA' ? sim.soil_pct
+                        : testRun.scenario === 'LLUVIA' ? sim.hum_pct
+                            : testRun.scenario === 'DIA_NUBLADO' ? sim.lux : sim.temp_c;
+                }
+                const type = kind === 'recovery' ? 'recovery'
+                    : message.includes('Alerta térmica') ? 'temperature_high'
+                        : message.includes('Estrés hídrico') ? 'soil_moisture_low'
+                            : message.includes('Humedad elevada') ? 'humidity_high'
+                                : message.includes('Frío intenso') ? 'temperature_low'
+                                    : message.includes('Radiación solar baja') ? 'low_light'
+                                        : kind === 'scenario' ? 'scenario_started' : `scenario_${kind}`;
+                recordTestEvent(type, message, kind === 'warning' ? 'warning' : 'info');
+            }
             if (simEventText) {
                 simEventText.textContent = `${getScenarioProfile().label} · ${message}`;
             }
@@ -2882,6 +3264,8 @@
                 return Number.isFinite(v) && v > 0 ? v : 1;
             })();
             const virtualMinutes = dtSeconds * speedFactor;
+            const previousAire = sim.aire;
+            const previousRiego = sim.riego;
             sim.minutesOfDay += (dtSeconds * 60) * speedFactor;
 
             const f = solarFactor(sim.minutesOfDay);
@@ -2889,6 +3273,7 @@
             const nightRecovery = (1 - f) * 2.4;
             const solarTemp = tempFromSolarFactor(f) + profile.tempBias;
             const solarHum = humFromSolarFactor(f) + profile.humBias;
+            const rainRecoveryBias = testRun?.scenario === 'LLUVIA' && testRun.elapsedVirtualMinutes >= 30 ? -24 : 0;
             const tempCooling = sim.aire ? 2.7 : 0;
             const tempHeating = sim.modoCalor ? 4 : 0;
             const targetTemp = clamp(
@@ -2898,7 +3283,7 @@
             );
             const targetHum = clamp(
                 solarHum + (sim.riego ? 8 : 0) + nightRecovery - (sim.aire ? 1.2 : 0)
-                    - (sim.modoCalor ? 3 : 0) - (sim.modoSeco ? 12 : 0) + profile.humBias,
+                    - (sim.modoCalor ? 3 : 0) - (sim.modoSeco ? 12 : 0) + profile.humBias + rainRecoveryBias,
                 20,
                 95
             );
@@ -2908,7 +3293,7 @@
             sim.hum_pct = sim.hum_pct + (targetHum - sim.hum_pct) * k;
 
             const soilLossBase = profile.weatherMode === 'wet' ? 0.002 : 0.008 + (0.006 * f);
-            const soilGain = sim.riego ? 0.052 : 0;
+            const soilGain = sim.riego ? (sim.scenario === 'SEQUIA' ? 0.14 : 0.052) : 0;
             const soilDrain = sim.modoSeco ? 0.012 : 0;
             sim.soil_pct = clamp(
                 sim.soil_pct + (soilGain - (soilLossBase + soilDrain) + profile.soilBias * 0.002) * virtualMinutes,
@@ -2940,15 +3325,18 @@
                 if (sim.soil_pct >= soilOff) sim.riego = false;
             }
 
-            const heatActive = sim.temp_c >= 32;
-            const droughtActive = sim.soil_pct <= 38;
-            const rainActive = sim.hum_pct >= 80;
-            const coldActive = sim.temp_c <= 18;
+            const isTestScenario = (scenario) => testRun?.scenario === scenario;
+            const heatActive = testRun ? isTestScenario('CALOR_EXTREMO') && sim.temp_c >= profile.tempOn : sim.temp_c >= 32;
+            const droughtActive = testRun ? isTestScenario('SEQUIA') && sim.soil_pct <= profile.soilOn : sim.soil_pct <= 38;
+            const rainActive = testRun ? isTestScenario('LLUVIA') && sim.hum_pct >= 80 : sim.hum_pct >= 80;
+            const coldActive = testRun
+                ? (isTestScenario('FRIO') || isTestScenario('FRIO_INTENSO2')) && sim.temp_c <= profile.tempOn
+                : sim.temp_c <= 18;
 
             if (heatActive && !sim.eventState.heat) {
                 pushScenarioEvent('warning', `Alerta térmica: ${sim.temp_c.toFixed(1)}°C con calor extremo.`);
                 sim.eventState.heat = true;
-            } else if (!heatActive && sim.eventState.heat) {
+            } else if (!heatActive && sim.eventState.heat && (!testRun || sim.temp_c <= profile.tempOff)) {
                 pushScenarioEvent('recovery', `Recuperación térmica: ${sim.temp_c.toFixed(1)}°C.`);
                 sim.eventState.heat = false;
             }
@@ -2956,7 +3344,7 @@
             if (droughtActive && !sim.eventState.drought) {
                 pushScenarioEvent('warning', `Estrés hídrico: suelo ${sim.soil_pct.toFixed(0)}%.`);
                 sim.eventState.drought = true;
-            } else if (!droughtActive && sim.eventState.drought) {
+            } else if (!droughtActive && sim.eventState.drought && (!testRun || sim.soil_pct >= profile.soilOff)) {
                 pushScenarioEvent('recovery', `Suelo recuperado: ${sim.soil_pct.toFixed(0)}%.`);
                 sim.eventState.drought = false;
             }
@@ -2964,7 +3352,7 @@
             if (rainActive && !sim.eventState.rain) {
                 pushScenarioEvent('info', `Humedad elevada: ${sim.hum_pct.toFixed(0)}% en el invernadero.`);
                 sim.eventState.rain = true;
-            } else if (!rainActive && sim.eventState.rain) {
+            } else if (!rainActive && sim.eventState.rain && (!testRun || sim.hum_pct <= 75)) {
                 pushScenarioEvent('recovery', `Humedad normal: ${sim.hum_pct.toFixed(0)}%.`);
                 sim.eventState.rain = false;
             }
@@ -2972,9 +3360,53 @@
             if (coldActive && !sim.eventState.cold) {
                 pushScenarioEvent('warning', `Frío intenso: ${sim.temp_c.toFixed(1)}°C.`);
                 sim.eventState.cold = true;
-            } else if (!coldActive && sim.eventState.cold) {
+            } else if (!coldActive && sim.eventState.cold && (!testRun || sim.temp_c >= profile.tempOff)) {
                 pushScenarioEvent('recovery', `Temperatura recuperada: ${sim.temp_c.toFixed(1)}°C.`);
                 sim.eventState.cold = false;
+            }
+
+            const cloudyActive = sim.scenario === 'DIA_NUBLADO' && f > 0.2 && sim.lux <= 20000;
+            if (cloudyActive && !sim.eventState.cloudy) {
+                pushScenarioEvent('warning', `Radiación solar baja: ${sim.lux.toFixed(0)} lux.`);
+                sim.eventState.cloudy = true;
+            } else if (!cloudyActive && sim.eventState.cloudy) {
+                pushScenarioEvent('recovery', `Radiación recuperada: ${sim.lux.toFixed(0)} lux.`);
+                sim.eventState.cloudy = false;
+            }
+
+            if (testRun && !testRun.finished) {
+                const run = testRun;
+                run.elapsedVirtualMinutes += virtualMinutes;
+                run.maxTemperature = Math.max(run.maxTemperature, sim.temp_c);
+                run.minSoil = Math.min(run.minSoil, sim.soil_pct);
+                const scenarioCondition = run.scenario === 'CALOR_EXTREMO' ? sim.temp_c >= profile.tempOn
+                    : run.scenario === 'SEQUIA' ? sim.soil_pct <= profile.soilOn
+                        : run.scenario === 'LLUVIA' ? sim.hum_pct >= 80
+                            : run.scenario === 'FRIO' ? sim.temp_c <= 18
+                                : run.scenario === 'FRIO_INTENSO2' ? sim.temp_c <= 16
+                                    : sim.lux <= 20000 && f > 0.2;
+                run.conditionObserved ||= scenarioCondition;
+                if (sim.aire !== previousAire && run.scenario === 'CALOR_EXTREMO') {
+                    if (sim.aire) run.actuatorActivated = true;
+                    recordTestEvent(`ventilation_${sim.aire ? 'on' : 'off'}`, `Ventilación ${sim.aire ? 'ON' : 'OFF'}`);
+                }
+                if (sim.riego !== previousRiego && run.scenario === 'SEQUIA') {
+                    if (sim.riego) run.actuatorActivated = true;
+                    recordTestEvent(`irrigation_${sim.riego ? 'on' : 'off'}`, `Riego ${sim.riego ? 'ON' : 'OFF'}`);
+                }
+                const expectedActuator = run.scenario === 'CALOR_EXTREMO' ? 'Ventilación'
+                    : run.scenario === 'SEQUIA' ? 'Riego' : null;
+                const actuatorSettled = run.scenario === 'CALOR_EXTREMO' ? !sim.aire
+                    : run.scenario === 'SEQUIA' ? !sim.riego : true;
+                const requiredResponseObserved = !expectedActuator || run.actuatorActivated;
+                const actuatorsSettled = run.mode === 'manual'
+                    ? requiredResponseObserved
+                    : actuatorSettled;
+                if (run.conditionObserved && run.recoveryObserved && actuatorsSettled) {
+                    finishTest(!expectedActuator || run.actuatorActivated, 'Condición del escenario observada');
+                } else if (run.elapsedVirtualMinutes >= 1440) {
+                    finishTest(false, 'Tiempo máximo alcanzado sin recuperación');
+                }
             }
 
             simSpeedValue.textContent = `Velocidad: x${speedFactor}`;
@@ -3128,7 +3560,16 @@
         async function sendDashboardCommand(device, mode) {
             if (simModeSelect.value === 'sim') {
                 if (device === 'automation') sim.modoAutomatico = mode === 'automatic';
-                else sim[device] = mode === 'on';
+                else {
+                    sim[device] = mode === 'on';
+                    if (testRun && !testRun.finished) {
+                        const expectedDevice = testRun.scenario === 'CALOR_EXTREMO' ? 'aire'
+                            : testRun.scenario === 'SEQUIA' ? 'riego' : null;
+                        if (device === expectedDevice && sim[device]) testRun.actuatorActivated = true;
+                        if (device === 'aire') recordTestEvent(`ventilation_${sim.aire ? 'on' : 'off'}`, `Ventilación ${sim.aire ? 'ON' : 'OFF'}`);
+                        if (device === 'riego') recordTestEvent(`irrigation_${sim.riego ? 'on' : 'off'}`, `Riego ${sim.riego ? 'ON' : 'OFF'}`);
+                    }
+                }
                 renderSensorCards();
                 return;
             }
@@ -3206,7 +3647,7 @@
                     if (debugHud) renderHud();
                     // Sincronizar el selector local con el timeScale que viene del backend
                     // (así el HUD del navegador refleja lo que el bot acaba de cambiar)
-                    if (simSpeedSelect && backendDevices.timeScale) {
+                    if (simModeSelect.value === 'backend' && simSpeedSelect && backendDevices.timeScale) {
                         const ts = String(backendDevices.timeScale);
                         if ([...simSpeedSelect.options].some(o => o.value === ts)) {
                             simSpeedSelect.value = ts;

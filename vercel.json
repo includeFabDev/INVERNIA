@@ -1,6 +1,7 @@
 {
   "rewrites": [
     { "source": "/api/state/:chatId", "destination": "/api" },
+    { "source": "/api/events", "destination": "/api" },
     { "source": "/api/action", "destination": "/api" },
     { "source": "/api/telegram-webhook", "destination": "/api" },
     { "source": "/", "destination": "/frontend/index.html" }

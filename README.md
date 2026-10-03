@@ -163,9 +163,12 @@ TELEGRAM_BOT_TOKEN=TU_TELEGRAM_BOT_TOKEN
 
 ```bash
 cd backend_vercel
-npm install
-npm run dev
+node src/index.js
 ```
+
+Abre `http://localhost:3000`. Este servidor también sirve la interfaz y las rutas de API; `python -m http.server` solo sirve archivos estáticos y responde 404/501 para `/api`.
+
+Para persistir los eventos de las pruebas, aplica la migración `supabase/migrations/202609290002_events.sql` en el proyecto Supabase.
 
 ---
 

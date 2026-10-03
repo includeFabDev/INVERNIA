@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { env } from './config/env.js';
 
 import { getSupabaseClient } from './services/supabaseClient.js';
@@ -9,12 +11,17 @@ import { ensureDeviceState } from './services/deviceStates.js';
 import { actionRoute } from './routes/action.js';
 import { measurementsRoute } from './routes/measurements.js';
 import { telemetryRoute } from './routes/telemetry.js';
+import { eventsRoute } from './routes/events.js';
+import cronHandler from '../../api/cron/invernadero.js';
 
 
 export function createApp() {
   const app = express();
   app.use(cors());
   app.use(express.json({ limit: '1mb' }));
+  const frontendDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../frontend');
+  app.use('/frontend', express.static(frontendDirectory));
+  app.get('/', (_req, res) => res.sendFile(path.join(frontendDirectory, 'index.html')));
 
 
   const supabase = getSupabaseClient();
@@ -35,6 +42,8 @@ export function createApp() {
   }));
 
   app.get('/api/measurements', awaitableHandler(measurementsRoute(supabase)));
+  app.all('/api/events', awaitableHandler(eventsRoute(supabase)));
+  app.get('/api/cron/invernadero', awaitableHandler(cronHandler));
   app.post('/api/v1/telemetry', awaitableHandler(telemetryRoute(supabase)));
   app.post('/api/telegram-webhook', awaitableHandler(telegramWebhookRoute(supabase)));
   app.post('/api/action', awaitableHandler(actionRoute(supabase)));
