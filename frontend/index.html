@@ -915,6 +915,57 @@
             box-shadow: 0 0 0 1px rgba(105, 230, 208, 0.18);
         }
 
+        .walk-hud {
+            position: fixed;
+            left: 20px;
+            bottom: 24px;
+            z-index: 60;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            border: 1px solid rgba(105, 230, 208, 0.34);
+            border-radius: 8px;
+            background: rgba(8, 16, 13, 0.78);
+            color: #e8efe8;
+            font-size: 11px;
+            pointer-events: none;
+            backdrop-filter: blur(12px);
+        }
+
+        .walk-hud[hidden] { display: none; }
+        .walk-hud strong { color: #9ce8c1; font-size: 10px; letter-spacing: 0.08em; }
+
+        .walk-reticle {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            z-index: 59;
+            width: 5px;
+            height: 5px;
+            border: 1px solid rgba(232, 239, 232, 0.82);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        .walk-reticle[hidden] { display: none; }
+
+        body.walk-mode .top-bar,
+        body.walk-mode .quick-actions,
+        body.walk-mode .nav-bar,
+        body.walk-mode .side-drawer-tab,
+        body.walk-mode .monitor-panel,
+        body.walk-mode .layer-drawer,
+        body.walk-mode .info-panel,
+        body.walk-mode .explorer-panel,
+        body.walk-mode .component-card,
+        body.walk-mode .iot-device-card,
+        body.walk-mode .debug-hud {
+            visibility: hidden;
+            pointer-events: none;
+        }
+
         .nav-bar {
             position: fixed;
             bottom: 20px;
@@ -1135,7 +1186,14 @@
     <div class="quick-actions" aria-label="Controles rápidos del gemelo digital">
         <button class="quick-action" type="button" data-action="explore">Explorar</button>
         <button class="quick-action" type="button" data-action="tour">Recorrido guiado</button>
+        <button class="quick-action" type="button" data-action="walk">Caminar</button>
     </div>
+
+    <div class="walk-hud" id="walkHud" hidden>
+        <strong>PRIMERA PERSONA</strong>
+        <span>WASD / flechas · Ratón para mirar · Esc para salir</span>
+    </div>
+    <div class="walk-reticle" id="walkReticle" hidden aria-hidden="true"></div>
 
     <aside class="explorer-panel hidden" id="explorerPanel" aria-label="Explorador de componentes del gemelo digital">
         <div class="explorer-panel-header">
@@ -1370,6 +1428,7 @@
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
         import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
         import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -1483,6 +1542,22 @@
         controls.minDistance = 1.5;
         controls.maxPolarAngle = Math.PI / 2.02;
         controls.update();
+
+        const pointerLockControls = new PointerLockControls(camera, renderer.domElement);
+        const walkKeys = new Set();
+        const walkForward = new THREE.Vector3();
+        const walkRight = new THREE.Vector3();
+        const walkDirection = new THREE.Vector3();
+        const walkCandidate = new THREE.Vector3();
+        const walkLookEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+        let walkModeActive = false;
+        let walkDragPointerId = null;
+        let walkLastPointerX = 0;
+        let walkLastPointerY = 0;
+        const walkEyeHeight = 1.65;
+        const walkSpeed = 3.2;
+        const pointerLockSupported = 'pointerLockElement' in document
+            && typeof renderer.domElement.requestPointerLock === 'function';
 
         /* Post-procesado: Bloom */
         const composer = new EffectComposer(renderer);
@@ -2606,12 +2681,133 @@
             controls.update();
         }
 
+        const walkBedBounds = greenhouseModel.userData.bedMeshes.map((bed) => {
+            const bounds = new THREE.Box3().setFromObject(bed);
+            bounds.min.x -= 0.18;
+            bounds.max.x += 0.18;
+            bounds.min.z -= 0.18;
+            bounds.max.z += 0.18;
+            return bounds;
+        });
+
+        function canWalkTo(x, z) {
+            const halfWidth = greenhouseModel.userData.dimensions.width / 2 - 0.3;
+            const halfLength = greenhouseModel.userData.dimensions.length / 2 - 0.45;
+            if (x < -halfWidth || x > halfWidth || z < -halfLength || z > halfLength) return false;
+            return !walkBedBounds.some((bounds) =>
+                x > bounds.min.x && x < bounds.max.x && z > bounds.min.z && z < bounds.max.z
+            );
+        }
+
+        function updateFirstPersonWalk(dt) {
+            if (!walkModeActive) return;
+            const forwardInput = Number(walkKeys.has('KeyW') || walkKeys.has('ArrowUp'))
+                - Number(walkKeys.has('KeyS') || walkKeys.has('ArrowDown'));
+            const rightInput = Number(walkKeys.has('KeyD') || walkKeys.has('ArrowRight'))
+                - Number(walkKeys.has('KeyA') || walkKeys.has('ArrowLeft'));
+            if (!forwardInput && !rightInput) return;
+
+            camera.getWorldDirection(walkForward);
+            walkForward.y = 0;
+            walkForward.normalize();
+            walkRight.crossVectors(walkForward, camera.up).normalize();
+            walkDirection.set(0, 0, 0)
+                .addScaledVector(walkForward, forwardInput)
+                .addScaledVector(walkRight, rightInput);
+            walkDirection.normalize();
+            const speed = walkSpeed * (walkKeys.has('ShiftLeft') || walkKeys.has('ShiftRight') ? 1.55 : 1);
+            const distance = speed * Math.min(dt, 0.05);
+            walkCandidate.copy(camera.position);
+
+            const nextX = walkCandidate.x + walkDirection.x * distance;
+            if (canWalkTo(nextX, walkCandidate.z)) walkCandidate.x = nextX;
+            const nextZ = walkCandidate.z + walkDirection.z * distance;
+            if (canWalkTo(walkCandidate.x, nextZ)) walkCandidate.z = nextZ;
+            camera.position.set(walkCandidate.x, walkEyeHeight, walkCandidate.z);
+        }
+
+        function leaveFirstPersonMode() {
+            if (!walkModeActive) return;
+            walkModeActive = false;
+            walkKeys.clear();
+            document.body.classList.remove('walk-mode');
+            document.getElementById('walkHud').hidden = true;
+            document.getElementById('walkReticle').hidden = true;
+            controls.enabled = true;
+            camera.getWorldDirection(walkForward);
+            controls.target.copy(camera.position).addScaledVector(walkForward, 8);
+            controls.update();
+            setQuickActionState(null);
+            window.__inverniaFocusTarget = 'walk';
+        }
+
+        function enterFirstPersonMode() {
+            if (walkModeActive) return;
+            if (tourStepIndex >= 0) exitGuidedTour(false);
+            clearEducationalSelection();
+            toggleExplorerPanel(false);
+            closeLeftDrawer();
+            closeRightDrawer();
+            tweenActive = false;
+            controls.enabled = false;
+            camera.position.set(0, walkEyeHeight, 12);
+            camera.lookAt(0, walkEyeHeight, 0);
+            walkModeActive = true;
+            document.body.classList.add('walk-mode');
+            document.getElementById('walkHud').hidden = false;
+            document.getElementById('walkReticle').hidden = false;
+            setQuickActionState('walk');
+            window.__inverniaFocusTarget = 'walk';
+            if (pointerLockSupported) pointerLockControls.lock();
+        }
+
+        pointerLockControls.addEventListener('unlock', leaveFirstPersonMode);
+        renderer.domElement.addEventListener('pointerdown', (event) => {
+            if (!walkModeActive || pointerLockControls.isLocked || event.button !== 0) return;
+            walkDragPointerId = event.pointerId;
+            walkLastPointerX = event.clientX;
+            walkLastPointerY = event.clientY;
+            renderer.domElement.setPointerCapture(event.pointerId);
+        });
+        renderer.domElement.addEventListener('pointermove', (event) => {
+            if (!walkModeActive || pointerLockControls.isLocked || event.pointerId !== walkDragPointerId) return;
+            const deltaX = event.clientX - walkLastPointerX;
+            const deltaY = event.clientY - walkLastPointerY;
+            walkLastPointerX = event.clientX;
+            walkLastPointerY = event.clientY;
+            walkLookEuler.setFromQuaternion(camera.quaternion, 'YXZ');
+            walkLookEuler.y -= deltaX * 0.0022;
+            walkLookEuler.x -= deltaY * 0.0022;
+            walkLookEuler.x = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, walkLookEuler.x));
+            camera.quaternion.setFromEuler(walkLookEuler);
+        });
+        const releaseWalkPointer = (event) => {
+            if (event.pointerId === walkDragPointerId) walkDragPointerId = null;
+        };
+        renderer.domElement.addEventListener('pointerup', releaseWalkPointer);
+        renderer.domElement.addEventListener('pointercancel', releaseWalkPointer);
+        window.addEventListener('keydown', (event) => {
+            if (!walkModeActive) return;
+            if (event.code === 'Escape' && !pointerLockControls.isLocked) {
+                leaveFirstPersonMode();
+                return;
+            }
+            if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight'].includes(event.code)) {
+                event.preventDefault();
+                walkKeys.add(event.code);
+            }
+        });
+        window.addEventListener('keyup', (event) => { walkKeys.delete(event.code); });
+        window.addEventListener('blur', () => walkKeys.clear());
+
         window.__inverniaCameraSnapshot = () => ({
             position: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
             target: { x: controls.target.x, y: controls.target.y, z: controls.target.z },
             tweenActive,
             focusTarget: window.__inverniaFocusTarget || null,
-            highlightVisible: educationalHighlight.visible
+            highlightVisible: educationalHighlight.visible,
+            walkMode: walkModeActive,
+            pointerLocked: pointerLockControls.isLocked
         });
 
         /* ==============================
@@ -3371,6 +3567,11 @@
         quickActions.forEach((button) => {
             button.addEventListener('click', () => {
                 const action = button.dataset.action;
+                if (action === 'walk') {
+                    if (walkModeActive) pointerLockControls.unlock();
+                    else enterFirstPersonMode();
+                    return;
+                }
                 if (action === 'tour') {
                     runGuidedTour();
                     return;
@@ -4509,8 +4710,10 @@
             /* Tween de cámara */
             updateCameraTween(dt);
 
+            updateFirstPersonWalk(rawDt);
+
             /* Controles orbitales */
-            if (!tweenActive) controls.update();
+            if (!walkModeActive && !tweenActive) controls.update();
 
             /* Partículas de calor */
             heatParticles.forEach(p => {
