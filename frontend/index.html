@@ -1191,7 +1191,7 @@
 
     <div class="walk-hud" id="walkHud" hidden>
         <strong>PRIMERA PERSONA</strong>
-        <span>WASD / flechas · Ratón para mirar · Esc para salir</span>
+        <span>WASD / flechas · Ratón para mirar · E abre/cierra la puerta exterior · Esc para salir</span>
     </div>
     <div class="walk-reticle" id="walkReticle" hidden aria-hidden="true"></div>
 
@@ -2690,10 +2690,16 @@
             return bounds;
         });
 
-        function canWalkTo(x, z) {
+        function canWalkTo(x, z, fromX, fromZ) {
             const halfWidth = greenhouseModel.userData.dimensions.width / 2 - 0.3;
             const halfLength = greenhouseModel.userData.dimensions.length / 2 - 0.45;
-            if (x < -halfWidth || x > halfWidth || z < -halfLength || z > halfLength) return false;
+            const exteriorDoor = greenhouseModel.userData.exteriorDoor;
+            const exteriorZ = exteriorDoor.exteriorDoorZ;
+            const outsideLimit = exteriorZ - greenhouseModel.userData.dimensions.antechamber.length - 1.5;
+            const xLimit = z < exteriorZ ? halfWidth + 5 : halfWidth;
+            if (x < -xLimit || x > xLimit || z < outsideLimit || z > halfLength) return false;
+            if (!exteriorDoor.isExteriorDoorOpen()
+                && ((fromZ >= exteriorZ && z < exteriorZ) || (fromZ < exteriorZ && z >= exteriorZ))) return false;
             return !walkBedBounds.some((bounds) =>
                 x > bounds.min.x && x < bounds.max.x && z > bounds.min.z && z < bounds.max.z
             );
@@ -2720,9 +2726,9 @@
             walkCandidate.copy(camera.position);
 
             const nextX = walkCandidate.x + walkDirection.x * distance;
-            if (canWalkTo(nextX, walkCandidate.z)) walkCandidate.x = nextX;
+            if (canWalkTo(nextX, walkCandidate.z, walkCandidate.x, walkCandidate.z)) walkCandidate.x = nextX;
             const nextZ = walkCandidate.z + walkDirection.z * distance;
-            if (canWalkTo(walkCandidate.x, nextZ)) walkCandidate.z = nextZ;
+            if (canWalkTo(walkCandidate.x, nextZ, walkCandidate.x, walkCandidate.z)) walkCandidate.z = nextZ;
             camera.position.set(walkCandidate.x, walkEyeHeight, walkCandidate.z);
         }
 
@@ -2755,6 +2761,9 @@
             walkModeActive = true;
             document.body.classList.add('walk-mode');
             document.getElementById('walkHud').hidden = false;
+            document.querySelector('#walkHud span').textContent = greenhouseModel.userData.exteriorDoor.isExteriorDoorOpen()
+                ? 'WASD / flechas · Ratón para mirar · Puerta exterior abierta · E para cerrar'
+                : 'WASD / flechas · Ratón para mirar · E abre/cierra la puerta exterior · Esc para salir';
             document.getElementById('walkReticle').hidden = false;
             setQuickActionState('walk');
             window.__inverniaFocusTarget = 'walk';
@@ -2790,6 +2799,17 @@
             if (!walkModeActive) return;
             if (event.code === 'Escape' && !pointerLockControls.isLocked) {
                 leaveFirstPersonMode();
+                return;
+            }
+            if (event.code === 'KeyE' && !event.repeat) {
+                const exteriorDoor = greenhouseModel.userData.exteriorDoor;
+                if (Math.abs(camera.position.z - exteriorDoor.exteriorDoorZ) <= 2.4
+                    && Math.abs(camera.position.x) <= 1.2) {
+                    const isOpen = exteriorDoor.toggleExteriorDoor();
+                    document.querySelector('#walkHud span').textContent = isOpen
+                        ? 'WASD / flechas · Ratón para mirar · Puerta exterior abierta · E para cerrar'
+                        : 'WASD / flechas · Ratón para mirar · E abre/cierra la puerta exterior · Esc para salir';
+                }
                 return;
             }
             if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight'].includes(event.code)) {
@@ -2937,8 +2957,8 @@
             { id: 'greenhouse', title: 'INVERNADERO', componentIds: ['structure', 'agrofilm', 'insectMesh', 'ridgeVent', 'lateralVent', 'antechamber'] },
             { id: 'crops', title: 'CULTIVOS', componentIds: ['beds', 'crops', ...Array.from({ length: 6 }, (_, index) => `bedC${index + 1}`)] },
             { id: 'irrigation', title: 'RIEGO', componentIds: ['waterEntry', 'irrigationFilter', 'irrigationValve', 'irrigationCollector', 'dripLines', 'purges', 'biolPoint'] },
-            { id: 'iot', title: 'IoT', componentIds: ['esp32A', 'esp32B', 'esp32C', 'stationA', 'stationB', 'stationC', ...Array.from({ length: 6 }, (_, index) => `soilC${index + 1}`), 'phSensor'] },
-            { id: 'connectivity', title: 'CONECTIVIDAD', componentIds: ['accessPoint', 'satelliteAntenna', 'connectivityArchitecture'] }
+            { id: 'iot', title: 'IoT', componentIds: ['esp32A', 'esp32B', 'esp32C', 'stationA', 'stationB', 'stationC', ...Array.from({ length: 6 }, (_, index) => `soilC${index + 1}`), 'phSensor', 'powerSystem', 'powerDistribution'] },
+            { id: 'connectivity', title: 'CONECTIVIDAD', componentIds: ['gateway', 'connectivityArchitecture'] }
         ];
         const categoryLabels = Object.fromEntries(explorerCategories.map(({ id, title }) => [id, title]));
         const componentCard = document.getElementById('componentCard');
@@ -2952,12 +2972,14 @@
             { componentId: 'structure', label: 'ESTRUCTURA GALVANIZADA' },
             { componentId: 'agrofilm', label: 'AGROFILM' },
             { componentId: 'insectMesh', label: 'MALLA ANTIÁFIDO' },
-            { componentId: 'ventilation', label: 'VENTILACIÓN CENITAL + LATERAL' },
+            { componentId: 'ventilation', label: 'VENTILACIÓN NATURAL / PASIVA + CORTINA LATERAL' },
             { componentId: 'crops', label: 'PRODUCCIÓN HORTÍCOLA' },
             { componentId: 'irrigationSystem', label: 'RIEGO POR GOTEO' },
             { componentId: 'antechamber', label: 'ANTECÁMARA · DOBLE ACCESO' },
             { componentId: 'iotArchitecture', label: 'ARQUITECTURA IoT' },
-            { componentId: 'connectivityArchitecture', label: 'CONECTIVIDAD SATELITAL' },
+            { componentId: 'powerSystem', label: 'PANEL SOLAR · CONTROLADOR · BATERÍA' },
+            { componentId: 'powerDistribution', label: 'DISTRIBUCIÓN ELÉCTRICA DC' },
+            { componentId: 'connectivityArchitecture', label: 'GATEWAY Y ENLACE IoT' },
             { componentId: 'overview', label: 'INVERNIA · GENERAL' }
         ];
 
@@ -3100,7 +3122,7 @@
             tourStepIndex = Math.max(0, Math.min(index, tourSteps.length - 1));
             const step = tourSteps[tourStepIndex];
             showEducationalComponent(step.componentId, { focus: true });
-            tourStatus.textContent = `${tourStepIndex + 1}/11 · ${step.label}`;
+            tourStatus.textContent = `${tourStepIndex + 1}/${tourSteps.length} · ${step.label}`;
             tourStatus.hidden = false;
             document.getElementById('tourControls').hidden = false;
             document.querySelector('[data-tour-action="previous"]').disabled = tourStepIndex === 0;

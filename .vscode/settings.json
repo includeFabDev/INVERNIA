@@ -3,6 +3,10 @@
         "/^node --check frontend\\\\greenhouse-model\\.js$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^node --check frontend\\\\greenhouse-model\\.js; if \\(\\$\\?\\) \\{ Write-Output 'greenhouse-model\\.js: syntax OK' \\}$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

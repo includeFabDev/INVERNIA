@@ -361,7 +361,7 @@ function createLateralVentilation(THREE, parent, createLabel) {
     motor.position.set(-side * 0.12, 0.1, 0.12);
     flap.add(motor);
     group.add(flap);
-    lateralFlaps.push({ flap, side });
+    lateralFlaps.push({ flap, side, motor });
   }
   const label = createLabel('CORTINA LATERAL', '#dfece5', 0.18);
   label.position.set(0, 2.15, GREENHOUSE.length / 2 - 1.6);
@@ -400,73 +400,8 @@ function createBeds(THREE, parent, createLabel) {
   const cropGroup = new THREE.Group();
   cropGroup.name = 'horticultural-crop-representation';
   bedGroup.add(cropGroup);
-  const cropTypes = [
-    { geometry: new THREE.ConeGeometry(0.27, 1.75, 7), material: new THREE.MeshStandardMaterial({ color: 0x367c3c, roughness: 0.9 }), indexes: [0, 1] },
-    { geometry: new THREE.ConeGeometry(0.25, 1.5, 7), material: new THREE.MeshStandardMaterial({ color: 0x4c9148, roughness: 0.9 }), indexes: [2] },
-    { geometry: new THREE.SphereGeometry(0.25, 7, 5), material: new THREE.MeshStandardMaterial({ color: 0x72a84b, roughness: 0.95 }), indexes: [3] },
-    { geometry: new THREE.ConeGeometry(0.24, 0.92, 7), material: new THREE.MeshStandardMaterial({ color: 0x5d9340, roughness: 0.95 }), indexes: [4, 5] }
-  ];
-  const helper = new THREE.Object3D();
-  cropTypes.forEach(({ geometry, material, indexes }) => {
-    const plantCount = indexes.length * 24;
-    const plants = new THREE.InstancedMesh(geometry, material, plantCount);
-    const foliage = geometry.type === 'SphereGeometry' ? null : new THREE.InstancedMesh(
-      new THREE.SphereGeometry(0.19, 6, 5),
-      new THREE.MeshStandardMaterial({ color: material.color.clone().multiplyScalar(1.08), roughness: 0.94 }),
-      plantCount * 3
-    );
-    let instance = 0;
-    let foliageInstance = 0;
-    indexes.forEach((bedIndex) => {
-      const x = bedCenters[bedIndex];
-      for (let row = 0; row < 24; row++) {
-        const z = -13.2 + row * 1.12;
-        const plantX = x + ((row % 2) ? 0.14 : -0.14);
-        const plantY = GREENHOUSE.bedHeight + (geometry.type === 'SphereGeometry' ? 0.16 : 0.75);
-        helper.rotation.set(0, 0, 0);
-        helper.position.set(plantX, plantY, z);
-        helper.scale.set(1, geometry.type === 'SphereGeometry' ? 0.72 : 0.72 + (row % 3) * 0.12, 1);
-        helper.updateMatrix();
-        plants.setMatrixAt(instance++, helper.matrix);
-        if (foliage) {
-          for (let leaf = 0; leaf < 3; leaf++) {
-            const angle = (leaf / 3) * Math.PI * 2 + (row % 2) * 0.4;
-            helper.position.set(plantX + Math.cos(angle) * 0.13, plantY - 0.2 + leaf * 0.28, z + Math.sin(angle) * 0.13);
-            helper.rotation.set(0, -angle, (leaf - 1) * 0.22);
-            helper.scale.set(0.75, 0.52, 1.35);
-            helper.updateMatrix();
-            foliage.setMatrixAt(foliageInstance++, helper.matrix);
-          }
-        }
-      }
-    });
-    plants.instanceMatrix.needsUpdate = true;
-    cropGroup.add(plants);
-    if (foliage) {
-      foliage.instanceMatrix.needsUpdate = true;
-      cropGroup.add(foliage);
-    }
-  });
-
-  const trellisGroup = new THREE.Group();
-  trellisGroup.name = 'lightweight-crop-trellis';
-  cropGroup.add(trellisGroup);
-  const trellisBedX = bedCenters[2];
-  const trellisBeams = [];
-  for (let z = -13; z <= 13; z += 3.25) {
-    trellisBeams.push([[trellisBedX - 0.42, 0.25, z], [trellisBedX - 0.42, 2.15, z]]);
-    trellisBeams.push([[trellisBedX + 0.42, 0.25, z], [trellisBedX + 0.42, 2.15, z]]);
-  }
-  for (const y of [1.2, 2.12]) {
-    trellisBeams.push([[trellisBedX - 0.42, y, -13], [trellisBedX + 0.42, y, -13]]);
-    trellisBeams.push([[trellisBedX - 0.42, y, -13], [trellisBedX - 0.42, y, 13]]);
-    trellisBeams.push([[trellisBedX + 0.42, y, -13], [trellisBedX + 0.42, y, 13]]);
-  }
-  addInstancedBeams(THREE, trellisGroup, trellisBeams, 0.018,
-    new THREE.MeshStandardMaterial({ color: 0xadb9a7, metalness: 0.25, roughness: 0.7 }));
-
   parent.add(bedGroup);
-  return { group: bedGroup, cropGroup, trellisGroup, centers: bedCenters, meshes: bedMeshes };
+  return { group: bedGroup, cropGroup, centers: bedCenters, meshes: bedMeshes };
 }
 
 function createBedSelection(THREE, parent, bedMeshes) {
@@ -533,32 +468,46 @@ function createAntechamber(THREE, parent, createLabel) {
   const doorWidth = 1.5;
   const doorFrameMaterial = new THREE.MeshStandardMaterial({ color: 0x9daaa7, metalness: 0.68, roughness: 0.34 });
   const doorLeafMaterial = new THREE.MeshPhysicalMaterial({ color: 0xd6e6db, transparent: true, opacity: 0.34, roughness: 0.72, side: THREE.DoubleSide });
+  const doors = {};
   for (const endZ of [z - halfLength, z + halfLength]) {
     for (const side of [-1, 1]) {
       const x0 = side < 0 ? -halfWidth : doorWidth / 2;
       const x1 = side < 0 ? -doorWidth / 2 : halfWidth;
       addSurface(THREE, group, [[x0, 0, endZ], [x1, 0, endZ], [x1, height, endZ], [x0, height, endZ]], wallMaterial);
     }
+    const doorId = endZ < z ? 'exterior' : 'interior';
     const door = new THREE.Group();
-    door.name = endZ < z ? 'antechamber-door-1-exterior' : 'antechamber-door-2-interior';
-    door.position.set(0, 0, endZ);
+    door.name = `antechamber-door-${doorId}`;
+    door.position.set(-doorWidth / 2, 0, endZ);
     group.add(door);
     const leaf = new THREE.Mesh(new THREE.BoxGeometry(doorWidth - 0.08, height - 0.08, 0.045), doorLeafMaterial);
-    leaf.position.set(0, (height - 0.08) / 2, 0);
+    leaf.position.set((doorWidth - 0.08) / 2, (height - 0.08) / 2, 0);
     door.add(leaf);
     const doorFrame = [];
-    for (const x of [-doorWidth / 2, 0, doorWidth / 2]) doorFrame.push([[x, 0, 0], [x, height, 0]]);
-    doorFrame.push([[-doorWidth / 2, height, 0], [doorWidth / 2, height, 0]]);
+    for (const x of [0, doorWidth / 2, doorWidth]) doorFrame.push([[x, 0, 0], [x, height, 0]]);
+    doorFrame.push([[0, height, 0], [doorWidth, height, 0]]);
     addInstancedBeams(THREE, door, doorFrame, 0.035, doorFrameMaterial);
-    const label = createLabel(endZ < z ? 'PUERTA 1 · EXTERIOR' : 'PUERTA 2 · INVERNADERO', '#d8e4d7', 0.2);
-    label.position.set(0, height + 0.28, 0);
-    door.add(label);
+    const label = createLabel(doorId === 'exterior' ? 'PUERTA EXTERIOR · E' : 'PUERTA INTERIOR', '#d8e4d7', 0.2);
+    label.position.set(0, height + 0.28, endZ);
+    group.add(label);
+    doors[doorId] = door;
   }
 
   const label = createLabel('ANTECÁMARA · DOBLE ACCESO', '#d8e4d7', 0.32);
   label.position.set(0, height + 0.18, z - halfLength);
   group.add(label);
-  return group;
+  doors.interior.rotation.y = Math.PI / 2;
+  doors.exterior.rotation.y = 0;
+  return {
+    group,
+    doors,
+    exteriorDoorZ: z - halfLength,
+    isExteriorDoorOpen: () => Math.abs(doors.exterior.rotation.y) > 0.1,
+    toggleExteriorDoor: () => {
+      doors.exterior.rotation.y = doors.exterior.rotation.y === 0 ? Math.PI / 2 : 0;
+      return Math.abs(doors.exterior.rotation.y) > 0.1;
+    }
+  };
 }
 
 function createZoneGroups(THREE, parent, createLabel) {
@@ -1213,6 +1162,49 @@ function createPowerSystem(THREE, parent, createLabel) {
   return { group, panel, controller, battery, dcBus };
 }
 
+function createPowerDistribution(THREE, parent, powerSystem, iotArchitecture, irrigationActuators, lateralFlaps, createLabel) {
+  const group = new THREE.Group();
+  group.name = 'conceptual-dc-power-distribution';
+  parent.add(group);
+
+  const cableMaterial = new THREE.LineBasicMaterial({
+    color: 0xffd447,
+    transparent: true,
+    opacity: 0.92
+  });
+  const busPosition = new THREE.Vector3();
+  powerSystem.dcBus.getWorldPosition(busPosition);
+  const cableY = 0.14;
+  const trunkX = -4.95;
+  const endpoints = [
+    ...iotArchitecture.selectableDevices,
+    ...irrigationActuators,
+    ...lateralFlaps.map(({ motor }) => motor)
+  ];
+  const cables = [];
+
+  endpoints.forEach((endpoint) => {
+    const targetPosition = new THREE.Vector3();
+    endpoint.getWorldPosition(targetPosition);
+    const points = [
+      busPosition,
+      new THREE.Vector3(trunkX, cableY, busPosition.z),
+      new THREE.Vector3(trunkX, cableY, targetPosition.z),
+      new THREE.Vector3(targetPosition.x, cableY, targetPosition.z),
+      targetPosition
+    ];
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const cable = new THREE.Line(geometry, cableMaterial);
+    group.add(cable);
+    cables.push(cable);
+  });
+
+  const label = createLabel('ALIMENTACIÓN DC · CONCEPTUAL', '#ffe178', 0.18);
+  label.position.set(-4.5, 0.38, 0.6);
+  group.add(label);
+  return { group, cables };
+}
+
 function createZoneIrrigationActuators(THREE, zoneGroups, createLabel) {
   const actuators = [];
   const zoneNames = ['A', 'B', 'C'];
@@ -1358,6 +1350,10 @@ export function createGreenhouseModel(THREE, createLabel) {
   const iotArchitecture = createIoTArchitecture(THREE, group, zones, beds.centers, createLabel);
   const connectivity = createOutdoorConnectivity(THREE, group, iotArchitecture.esp32Nodes, createLabel);
   const powerSystem = createPowerSystem(THREE, group, createLabel);
+  const powerDistribution = createPowerDistribution(
+    THREE, group, powerSystem, iotArchitecture, irrigationActuators,
+    lateralVentilation.lateralFlaps, createLabel
+  );
   const bedSelection = createBedSelection(THREE, group, beds.meshes);
   const irrigation = {
     serviceGroup: irrigationService.group,
@@ -1412,7 +1408,7 @@ export function createGreenhouseModel(THREE, createLabel) {
     'La ventilación cenital queda como pasiva y la cortina lateral se incorpora como posible actuador controlado.',
     [ridgeVentilation.group, lateralVentilation.group], [1.5, 0.8, 1]);
   registerEducationalComponent('antechamber', 'greenhouse', 'ANTECÁMARA · DOBLE ACCESO',
-    'Acceso exterior por puerta 1, antecámara y puerta 2 hacia el invernadero, como dos barreras de entrada.', antechamber, [0.12, 0.36, -1], {
+    'Antecámara con puertas de acceso. En primera persona, acércate a la puerta exterior y pulsa E para abrirla o cerrarla.', antechamber.group, [0.12, 0.36, -1], {
       focusPoint: [0, 1.4, -16.5], focusDistance: 8
     });
   registerEducationalComponent('beds', 'crops', 'CAMELLONES C1–C6',
@@ -1428,7 +1424,7 @@ export function createGreenhouseModel(THREE, createLabel) {
       });
   });
   registerEducationalComponent('crops', 'crops', 'PRODUCCIÓN HORTÍCOLA',
-    'Representación visual diversa de hortalizas altas, guiadas, de hoja baja y de porte medio. Es ilustrativa, no asigna cultivos a camellones.', beds.cropGroup, [1, 0.42, 0.38], {
+    'Camellones preparados para producción hortícola. La vegetación no se muestra para dejar despejada la vista interior.', beds.group, [1, 0.42, 0.38], {
       focusPoint: [0, 1.2, 0], focusDistance: 34
     });
   registerEducationalComponent('waterEntry', 'irrigation', 'ENTRADA DE AGUA',
@@ -1446,10 +1442,12 @@ export function createGreenhouseModel(THREE, createLabel) {
     [irrigationService.group, manifold.group, ...irrigationActuators], [1, 0.42, 0.38], { focusPoint: [0.4, 0.75, -2], focusDistance: 34 });
   registerEducationalComponent('purges', 'irrigation', 'PURGAS',
     'Terminaciones de purga visibles al final de los laterales de goteo.', manifold.purgeGroup, [0.5, 1.2, 1.8]);
-  registerEducationalComponent('gateway', 'iot', 'GATEWAY IoT',
+  registerEducationalComponent('gateway', 'connectivity', 'GATEWAY IoT',
     'Punto común de agregación para ESP32-A/B/C antes del sistema INVERNIA. Representación conceptual, no definitiva.', connectivity.gatewayGroup, [1.2, 0.6, 1], { focusPoint: [6.2, 1.5, 1.6], focusDistance: 10 });
   registerEducationalComponent('powerSystem', 'iot', 'SISTEMA SOLAR / BATERÍA',
     'Alimentación autónoma conceptual con panel solar, controlador, batería y distribución DC para la capa IoT.', powerSystem.group, [1.9, 0.5, 1], { focusPoint: [-7.4, 1.1, -1.6], focusDistance: 12 });
+  registerEducationalComponent('powerDistribution', 'iot', 'DISTRIBUCIÓN ELÉCTRICA DC',
+    'Líneas amarillas conceptuales muestran la distribución desde la batería y la salida DC hacia nodos, sensores y actuadores. La instalación real aún está por definir.', powerDistribution.group, [1.5, 0.7, 1], { focusPoint: [-2.5, 0.5, 0], focusDistance: 22 });
   registerEducationalComponent('biolPoint', 'irrigation', 'PUNTO DE APLICACIÓN DE BIOL',
     'Punto previsto para aplicación de biol diluido y previamente filtrado mediante inyector o aplicación manual. No es automatizado.', irrigationService.biolGroup, [1.7, 0.7, 1.2]);
   iotArchitecture.selectableDevices.forEach((device) => {
@@ -1480,12 +1478,8 @@ export function createGreenhouseModel(THREE, createLabel) {
   registerEducationalComponent('iotArchitecture', 'iot', 'ARQUITECTURA IoT',
     'Tres nodos ESP32, tres estaciones ambientales, seis sensores de humedad de suelo y un sensor de pH. Se reutilizan los 13 dispositivos del modelo.',
     iotArchitecture.selectableDevices, [0.15, 0.6, 1], { focusPoint: [0, 1.2, 0], focusDistance: 27 });
-  registerEducationalComponent('accessPoint', 'connectivity', 'PUNTO DE ACCESO / ROUTER',
-    'Punto de acceso exterior que concentra la comunicación Wi‑Fi local y enlaza con la red interna.', connectivity.routerGroup, [1.7, 0.7, 1.2]);
-  registerEducationalComponent('satelliteAntenna', 'connectivity', 'ANTENA SATELITAL',
-    'Antena satelital exterior sobre mástil, separada de la cubierta del invernadero.', connectivity.satelliteGroup, [1.8, 0.72, 1.3]);
   registerEducationalComponent('connectivityArchitecture', 'connectivity', 'ARQUITECTURA DE CONECTIVIDAD',
-    'ESP32 → Wi‑Fi local → AP/router → red interna → internet satelital. Los nodos no se conectan directamente a la antena.', connectivity.group, [0.25, 0.55, 0.9], {
+    'ESP32-A/B/C → enlace IoT neutral → Gateway IoT → red IoT. El protocolo definitivo queda pendiente.', connectivity.group, [0.25, 0.55, 0.9], {
       focusPoint: [2.5, 1.8, 0], focusDistance: 29
     });
 
@@ -1493,7 +1487,7 @@ export function createGreenhouseModel(THREE, createLabel) {
     group: ridgeVentilation.group,
     lateralGroup: lateralVentilation.group,
     updateVisualState: (active, elapsed) => updateVentilationVisualState(ridgeVentilation, active, elapsed)
-  }, iotArchitecture, connectivity, educationalComponents, setBedHighlight: bedSelection.setBedHighlight, setServiceHighlight: (active) => {
+  }, iotArchitecture, connectivity, powerSystem, powerDistribution, exteriorDoor: antechamber, educationalComponents, setBedHighlight: bedSelection.setBedHighlight, setServiceHighlight: (active) => {
     serviceHighlight.visible = active;
   }, ...zones };
   return group;
