@@ -1609,18 +1609,6 @@
             );
             scene.add(skyDome);
 
-            const sunGroup = new THREE.Group();
-            const sun = new THREE.Mesh(
-                new THREE.SphereGeometry(1.8, 22, 22),
-                new THREE.MeshBasicMaterial({ color: 0xffd18a })
-            );
-            const sunGlow = new THREE.Mesh(
-                new THREE.SphereGeometry(3.2, 22, 22),
-                new THREE.MeshBasicMaterial({ color: 0xffd18a, transparent: true, opacity: 0.16 })
-            );
-            sunGroup.add(sun, sunGlow);
-            scene.add(sunGroup);
-
             const moonGroup = new THREE.Group();
             const moon = new THREE.Mesh(
                 new THREE.SphereGeometry(1.2, 20, 20),
@@ -1786,18 +1774,8 @@
                     scene.fog.density = floodScenario ? 0.024 : rainScenario ? 0.02 : overcastScenario ? 0.015 : 0.012;
                 }
 
-                const sunVisibility = daylightFactor > 0.08 && !rainScenario;
-                sunGroup.visible = sunVisibility;
                 moonGroup.visible = nightFactor > 0.48 && !rainScenario && !overcastScenario;
                 stars.visible = nightFactor > 0.52 && !rainScenario && !overcastScenario;
-
-                const sunDistance = 34;
-                const sunX = Math.cos(solarAngle) * sunDistance;
-                const sunY = Math.max(-2, Math.sin(solarAngle) * 18 + 11);
-                sun.position.set(sunX, sunY, -22 + Math.cos(solarAngle) * 8);
-                sun.material.opacity = sunVisibility ? 1 : 0;
-                sunGlow.material.opacity = sunVisibility ? (0.12 + daylightFactor * 0.16) : 0;
-                sunGroup.position.set(0, 0, 0);
 
                 const moonPhase = solarAngle + Math.PI;
                 const moonX = Math.cos(moonPhase) * 30;
@@ -1860,18 +1838,12 @@
                 dirLight.position.set(-14 + Math.cos(solarAngle) * 10, 15 + Math.sin(solarAngle) * 10, 16);
                 dirLight.color.setHSL(coldScenario ? 0.58 : heatScenario ? 0.08 : dayColor.getHSL({ h: 0, s: 0, l: 0 }).h, 0.6, 0.72);
 
-                if (lux > 0) {
-                    const glow = clamp((lux / 20000) * (heatScenario ? 1.6 : 1.0), 0.1, 1.8);
-                    sunGlow.material.opacity = glow * (rainScenario ? 0.2 : 0.42);
-                    if (sunGroup.visible) sun.scale.setScalar(1 + glow * 0.25);
-                }
-
                 if (greenhouseModel?.userData && greenhouseModel.userData.bedMeshes) {
                     updateSoilVisuals(soilMoisture);
                 }
             }
 
-            return { skyDome, sunGroup, moonGroup, stars, rain, clouds, updateEnvironmentVisuals };
+            return { skyDome, moonGroup, stars, rain, clouds, updateEnvironmentVisuals };
         }
 
         /* ==============================
@@ -2681,28 +2653,32 @@
             controls.update();
         }
 
-        const walkBedBounds = greenhouseModel.userData.bedMeshes.map((bed) => {
-            const bounds = new THREE.Box3().setFromObject(bed);
-            bounds.min.x -= 0.18;
-            bounds.max.x += 0.18;
-            bounds.min.z -= 0.18;
-            bounds.max.z += 0.18;
-            return bounds;
-        });
-
-        function canWalkTo(x, z, fromX, fromZ) {
-            const halfWidth = greenhouseModel.userData.dimensions.width / 2 - 0.3;
-            const halfLength = greenhouseModel.userData.dimensions.length / 2 - 0.45;
+        function canWalkTo(x, z, fromZ) {
+            const dimensions = greenhouseModel.userData.dimensions;
+            const greenhouseHalfWidth = dimensions.width / 2 - 0.3;
+            const greenhouseHalfLength = dimensions.length / 2 - 0.45;
             const exteriorDoor = greenhouseModel.userData.exteriorDoor;
+            const frontWallZ = -dimensions.length / 2;
             const exteriorZ = exteriorDoor.exteriorDoorZ;
-            const outsideLimit = exteriorZ - greenhouseModel.userData.dimensions.antechamber.length - 1.5;
-            const xLimit = z < exteriorZ ? halfWidth + 5 : halfWidth;
-            if (x < -xLimit || x > xLimit || z < outsideLimit || z > halfLength) return false;
-            if (!exteriorDoor.isExteriorDoorOpen()
-                && ((fromZ >= exteriorZ && z < exteriorZ) || (fromZ < exteriorZ && z >= exteriorZ))) return false;
-            return !walkBedBounds.some((bounds) =>
-                x > bounds.min.x && x < bounds.max.x && z > bounds.min.z && z < bounds.max.z
-            );
+            const antechamberHalfWidth = dimensions.antechamber.width / 2 - 0.3;
+            const outsideLimit = exteriorZ - dimensions.antechamber.length - 1.5;
+            const isInAntechamber = z < frontWallZ && z >= exteriorZ;
+            const isOutside = z < exteriorZ;
+
+            if (z > greenhouseHalfLength || z < outsideLimit) return false;
+            if (z >= frontWallZ && Math.abs(x) > greenhouseHalfWidth) return false;
+            if (isInAntechamber && Math.abs(x) > antechamberHalfWidth) return false;
+            if (isOutside && Math.abs(x) > greenhouseModel.userData.dimensions.width / 2 + 5) return false;
+
+            const crossedGreenhouseFrontWall = (fromZ >= frontWallZ && z < frontWallZ)
+                || (fromZ < frontWallZ && z >= frontWallZ);
+            if (crossedGreenhouseFrontWall && Math.abs(x) > exteriorDoor.doorwayHalfWidth) return false;
+
+            const crossedExteriorDoor = (fromZ >= exteriorZ && z < exteriorZ)
+                || (fromZ < exteriorZ && z >= exteriorZ);
+            if (crossedExteriorDoor
+                && (!exteriorDoor.isExteriorDoorOpen() || Math.abs(x) > exteriorDoor.doorwayHalfWidth)) return false;
+            return true;
         }
 
         function updateFirstPersonWalk(dt) {
@@ -2726,9 +2702,9 @@
             walkCandidate.copy(camera.position);
 
             const nextX = walkCandidate.x + walkDirection.x * distance;
-            if (canWalkTo(nextX, walkCandidate.z, walkCandidate.x, walkCandidate.z)) walkCandidate.x = nextX;
+            if (canWalkTo(nextX, walkCandidate.z, walkCandidate.z)) walkCandidate.x = nextX;
             const nextZ = walkCandidate.z + walkDirection.z * distance;
-            if (canWalkTo(walkCandidate.x, nextZ, walkCandidate.x, walkCandidate.z)) walkCandidate.z = nextZ;
+            if (canWalkTo(walkCandidate.x, nextZ, walkCandidate.z)) walkCandidate.z = nextZ;
             camera.position.set(walkCandidate.x, walkEyeHeight, walkCandidate.z);
         }
 

@@ -501,6 +501,7 @@ function createAntechamber(THREE, parent, createLabel) {
   return {
     group,
     doors,
+    doorwayHalfWidth: doorWidth / 2 - 0.3,
     exteriorDoorZ: z - halfLength,
     isExteriorDoorOpen: () => Math.abs(doors.exterior.rotation.y) > 0.1,
     toggleExteriorDoor: () => {
