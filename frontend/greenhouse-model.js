@@ -300,10 +300,10 @@ function createRidgeVentilation(THREE, parent, createLabel) {
     airflow.push(arrow);
   }
 
-  const closedLabel = createLabel('VENTILACIÓN · CERRADA', '#c7d5ce', 0.2);
+  const closedLabel = createLabel('VENTILACIÓN NATURAL / PASIVA', '#c7d5ce', 0.2);
   closedLabel.position.set(0, GREENHOUSE.ridgeHeight + 0.45, -halfLength + 2.1);
   ventilationGroup.add(closedLabel);
-  const openLabel = createLabel('VENTILACIÓN · ABIERTA', '#55d6d1', 0.2);
+  const openLabel = createLabel('VENTILACIÓN NATURAL / PASIVA', '#55d6d1', 0.2);
   openLabel.position.copy(closedLabel.position);
   openLabel.visible = false;
   ventilationGroup.add(openLabel);
@@ -335,9 +335,9 @@ function updateVentilationVisualState(ventilation, active, elapsed) {
   });
 }
 
-function createLateralVentilation(THREE, parent) {
+function createLateralVentilation(THREE, parent, createLabel) {
   const group = new THREE.Group();
-  group.name = 'lateral-mesh-ventilation';
+  group.name = 'lateral-ventilation-curtain';
   parent.add(group);
   const lateralFlaps = [];
   const material = new THREE.MeshPhysicalMaterial({
@@ -354,9 +354,18 @@ function createLateralVentilation(THREE, parent) {
     const panel = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.72, GREENHOUSE.length - 1), material);
     panel.position.x = -side * 0.03;
     flap.add(panel);
+    const motor = new THREE.Mesh(
+      new THREE.BoxGeometry(0.14, 0.14, 0.14),
+      new THREE.MeshStandardMaterial({ color: 0x6e8479, metalness: 0.62, roughness: 0.32 })
+    );
+    motor.position.set(-side * 0.12, 0.1, 0.12);
+    flap.add(motor);
     group.add(flap);
     lateralFlaps.push({ flap, side });
   }
+  const label = createLabel('CORTINA LATERAL', '#dfece5', 0.18);
+  label.position.set(0, 2.15, GREENHOUSE.length / 2 - 1.6);
+  group.add(label);
   return { group, lateralFlaps };
 }
 
@@ -744,35 +753,37 @@ function createSoilMoistureSensors(THREE, zoneGroups, bedCenters, createLabel) {
   return sensors;
 }
 
-function createPhSensor(THREE, parent, createLabel) {
-  const serviceMount = parent.getObjectByName('phProbeMount');
-  if (!serviceMount) throw new Error('Irrigation service pH mount was not found');
-
+function createPhSensor(THREE, parent, bedCenters, createLabel) {
+  const representativeX = bedCenters[2] ?? 0;
   const sensor = new THREE.Group();
-  sensor.name = 'irrigation-water-ph-sensor';
-  sensor.position.set(0.22, 0.03, 0.12);
+  sensor.name = 'substrate-ph-sensor';
+  sensor.position.set(representativeX, GREENHOUSE.bedHeight + 0.14, 0);
   const probeMaterial = new THREE.MeshStandardMaterial({ color: 0xd8ded7, metalness: 0.58, roughness: 0.32 });
-  const probe = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.34, 8), probeMaterial);
+  const probe = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.04, 0.34, 8), probeMaterial);
   probe.rotation.z = Math.PI / 2;
   sensor.add(probe);
-  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.07, 10), new THREE.MeshStandardMaterial({ color: 0x5ea8a0, roughness: 0.4 }));
+  const collar = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.075, 0.075, 0.07, 10),
+    new THREE.MeshStandardMaterial({ color: 0x5ea8a0, roughness: 0.4 })
+  );
   collar.rotation.z = Math.PI / 2;
   collar.position.x = -0.08;
   sensor.add(collar);
-  const label = createLabel('pH', '#e5f3e9', 0.18);
-  label.position.set(0.08, 0.28, 0.16);
+  const label = createLabel('pH · SUSTRATO', '#e5f3e9', 0.18);
+  label.position.set(0.08, 0.32, 0.16);
   sensor.add(label);
   setIoTDeviceMetadata(sensor, {
     id: 'PH-01',
-    name: 'Sensor de pH de riego',
+    name: 'Sensor pH de sustrato',
     type: 'ph_sensor',
-    zone: 'SERVICIO',
+    zone: 'B',
     variable: 'ph',
     unit: 'pH',
-    description: 'Sensor de pH del agua de riego en el punto de servicio; mantiene el equilibrio del sustrato y del fertirriego para evitar estrés nutricional.',
-    logicalRef: 'agua-solucion-riego'
+    description: 'Sensor conceptual de pH del sustrato asociado a un camellón representativo; aún no define la distribución física definitiva del sistema.',
+    logicalRef: 'sustrato-cultivo',
+    camellon: 'C3'
   });
-  serviceMount.add(sensor);
+  parent.add(sensor);
   return sensor;
 }
 
@@ -780,7 +791,7 @@ function createIoTArchitecture(THREE, parent, zones, bedCenters, createLabel) {
   const esp32Nodes = createEsp32Nodes(THREE, zones, createLabel);
   const environmentalStations = createIoTStations(THREE, zones, createLabel);
   const soilMoistureSensors = createSoilMoistureSensors(THREE, zones, bedCenters, createLabel);
-  const phSensor = createPhSensor(THREE, parent, createLabel);
+  const phSensor = createPhSensor(THREE, parent, bedCenters, createLabel);
   const pickMaterial = new THREE.MeshBasicMaterial({
     transparent: true,
     opacity: 0,
@@ -794,6 +805,37 @@ function createIoTArchitecture(THREE, parent, zones, bedCenters, createLabel) {
     ...soilMoistureSensors,
     phSensor
   ];
+
+  const sensorLinkMaterial = new THREE.LineBasicMaterial({ color: 0x7ad8c8, transparent: true, opacity: 0.7 });
+  const sensorLinks = [];
+  esp32Nodes.forEach((node) => {
+    const zone = node.userData.iotDevice.zone;
+    const associatedDeviceIds = [
+      `ENV-${zone}`,
+      `SOIL-C${zone === 'A' ? 1 : zone === 'B' ? 3 : 5}`,
+      `SOIL-C${zone === 'A' ? 2 : zone === 'B' ? 4 : 6}`,
+      ...(zone === 'B' ? ['PH-01'] : [])
+    ];
+    associatedDeviceIds.forEach((id) => {
+      const target = selectableDevices.find((device) => device.userData.iotDevice.id === id);
+      if (!target) return;
+      const espPosition = new THREE.Vector3();
+      const targetPosition = new THREE.Vector3();
+      node.getWorldPosition(espPosition);
+      target.getWorldPosition(targetPosition);
+      const controlPoint = targetPosition.clone().lerp(espPosition, 0.5).add(new THREE.Vector3(0.25, 0.35, 0));
+      const curve = new THREE.CatmullRomCurve3([
+        targetPosition,
+        controlPoint,
+        espPosition
+      ]);
+      const geometry = new THREE.BufferGeometry().setFromPoints(curve.getPoints(24));
+      const line = new THREE.Line(geometry, sensorLinkMaterial);
+      parent.add(line);
+      sensorLinks.push(line);
+    });
+  });
+
   const pickTargets = selectableDevices.map((device) => {
     const metadata = device.userData.iotDevice;
     const geometry = metadata.type === 'controller'
@@ -817,7 +859,8 @@ function createIoTArchitecture(THREE, parent, zones, bedCenters, createLabel) {
     soilMoistureSensors,
     phSensor,
     selectableDevices,
-  pickTargets,
+    pickTargets,
+    sensorLinks,
     summaryByZone: {
       A: selectableDevices.filter((device) => device.userData.iotDevice.zone === 'A'),
       B: selectableDevices.filter((device) => device.userData.iotDevice.zone === 'B'),
@@ -1054,83 +1097,154 @@ function createIrrigationManifold(THREE, parent, bedCenters, service, createLabe
 
 function createOutdoorConnectivity(THREE, parent, esp32Nodes, createLabel) {
   const group = new THREE.Group();
-  group.name = 'outdoor-satellite-connectivity';
+  group.name = 'iot-connectivity-architecture';
   parent.add(group);
 
-  const routerGroup = new THREE.Group();
-  routerGroup.name = 'outdoor-access-point';
-  routerGroup.position.set(6.5, 1.15, 1.5);
-  const router = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.2, 0.48),
-    new THREE.MeshStandardMaterial({ color: 0x394842, metalness: 0.38, roughness: 0.46 }));
-  routerGroup.add(router);
-  for (const x of [-0.22, 0.22]) {
-    const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.42, 6),
-      new THREE.MeshStandardMaterial({ color: 0xb1bdb6, metalness: 0.6, roughness: 0.35 }));
-    antenna.position.set(x, 0.28, 0);
-    routerGroup.add(antenna);
-  }
-  const apLabel = createLabel('AP / ROUTER', '#bde7dc', 0.2);
-  apLabel.position.set(0, 0.52, 0.3);
-  routerGroup.add(apLabel);
-  group.add(routerGroup);
+  const gatewayGroup = new THREE.Group();
+  gatewayGroup.name = 'gateway-iot';
+  gatewayGroup.position.set(6.5, 1.15, 1.5);
+  const gatewayBody = new THREE.Mesh(
+    new THREE.BoxGeometry(0.8, 0.26, 0.52),
+    new THREE.MeshStandardMaterial({ color: 0x3a4d47, metalness: 0.38, roughness: 0.46 })
+  );
+  gatewayGroup.add(gatewayBody);
+  const gatewayAntenna = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.016, 0.016, 0.38, 6),
+    new THREE.MeshStandardMaterial({ color: 0xcfe3d8, metalness: 0.65, roughness: 0.35 })
+  );
+  gatewayAntenna.position.set(0.16, 0.3, -0.1);
+  gatewayGroup.add(gatewayAntenna);
+  const gatewayLabel = createLabel('GATEWAY IoT', '#bde7dc', 0.2);
+  gatewayLabel.position.set(0, 0.56, 0.32);
+  gatewayGroup.add(gatewayLabel);
+  group.add(gatewayGroup);
 
-  const internalNetwork = new THREE.Group();
-  internalNetwork.name = 'internal-network-node';
-  internalNetwork.position.set(7.8, 2.05, -1.65);
-  const networkNode = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.18, 0.24),
-    new THREE.MeshStandardMaterial({ color: 0x5e7169, metalness: 0.32, roughness: 0.46 }));
-  internalNetwork.add(networkNode);
-  const networkLabel = createLabel('RED INTERNA', '#bde7dc', 0.16);
-  networkLabel.position.y = 0.3;
-  internalNetwork.add(networkLabel);
-  group.add(internalNetwork);
+  const networkNode = new THREE.Group();
+  networkNode.name = 'iot-network-node';
+  networkNode.position.set(7.8, 1.7, -1.65);
+  const nodeBody = new THREE.Mesh(
+    new THREE.BoxGeometry(0.36, 0.2, 0.26),
+    new THREE.MeshStandardMaterial({ color: 0x5f746a, metalness: 0.32, roughness: 0.46 })
+  );
+  networkNode.add(nodeBody);
+  const networkLabel = createLabel('RED IoT', '#bde7dc', 0.16);
+  networkLabel.position.y = 0.34;
+  networkNode.add(networkLabel);
+  group.add(networkNode);
 
-  const satelliteGroup = new THREE.Group();
-  satelliteGroup.name = 'satellite-dish-and-mast';
-  satelliteGroup.position.set(9.2, 0, -4.5);
-  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.065, 2.8, 8),
-    new THREE.MeshStandardMaterial({ color: 0x9daaa7, metalness: 0.72, roughness: 0.32 }));
-  mast.position.y = 1.4;
-  satelliteGroup.add(mast);
-  const dishProfile = [
-    new THREE.Vector2(0.04, 0), new THREE.Vector2(0.14, 0.025),
-    new THREE.Vector2(0.27, 0.09), new THREE.Vector2(0.41, 0.2),
-    new THREE.Vector2(0.55, 0.36)
-  ];
-  const dishMaterial = new THREE.MeshStandardMaterial({ color: 0xd7dfd8, metalness: 0.54, roughness: 0.38, side: THREE.DoubleSide });
-  const dish = new THREE.Mesh(new THREE.LatheGeometry(dishProfile, 20), dishMaterial);
-  dish.position.y = 2.42;
-  satelliteGroup.add(dish);
-  const dishRim = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.018, 6, 28), dishMaterial);
-  dishRim.position.y = 2.78;
-  dishRim.rotation.x = Math.PI / 2;
-  satelliteGroup.add(dishRim);
-  const feedMaterial = new THREE.MeshStandardMaterial({ color: 0x77857d, metalness: 0.64, roughness: 0.35 });
-  addCylinderBetween(THREE, satelliteGroup, [0, 2.5, 0], [0, 2.86, 0.24], 0.022, feedMaterial, 6);
-  const feed = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), feedMaterial);
-  feed.position.set(0, 2.86, 0.24);
-  satelliteGroup.add(feed);
-  const dishLabel = createLabel('ANTENA SATELITAL', '#dce7df', 0.2);
-  dishLabel.position.set(0, 3.55, 0);
-  satelliteGroup.add(dishLabel);
-  group.add(satelliteGroup);
-
-  const linkMaterial = new THREE.LineBasicMaterial({ color: 0x55c9d2, transparent: true, opacity: 0.48 });
+  const linkMaterial = new THREE.LineBasicMaterial({ color: 0x55c9d2, transparent: true, opacity: 0.7 });
   const linkSegments = [];
-  const apPosition = routerGroup.position.clone();
+  const gatewayPosition = gatewayGroup.position.clone();
   esp32Nodes.forEach((node) => {
     const nodePosition = new THREE.Vector3();
     node.getWorldPosition(nodePosition);
-    linkSegments.push([nodePosition.toArray(), [apPosition.x, apPosition.y, apPosition.z]]);
+    linkSegments.push([nodePosition.toArray(), [gatewayPosition.x, gatewayPosition.y, gatewayPosition.z]]);
   });
-  linkSegments.push([[apPosition.x, apPosition.y, apPosition.z], internalNetwork.position.toArray()]);
-  linkSegments.push([internalNetwork.position.toArray(), satelliteGroup.position.clone().add(new THREE.Vector3(0, 3, 0)).toArray()]);
+  linkSegments.push([[gatewayPosition.x, gatewayPosition.y, gatewayPosition.z], networkNode.position.toArray()]);
   const linkPositions = new Float32Array(linkSegments.flat(2));
   const linkGeometry = new THREE.BufferGeometry();
   linkGeometry.setAttribute('position', new THREE.BufferAttribute(linkPositions, 3));
   group.add(new THREE.LineSegments(linkGeometry, linkMaterial));
 
-  return { group, routerGroup, satelliteGroup };
+  const linkLabel = createLabel('ENLACE IoT', '#8de4db', 0.18);
+  linkLabel.position.set(6.1, 1.75, -0.4);
+  group.add(linkLabel);
+
+  return { group, gatewayGroup, networkNode };
+}
+
+function createPowerSystem(THREE, parent, createLabel) {
+  const group = new THREE.Group();
+  group.name = 'solar-power-system';
+  group.position.set(-7.4, 0, -1.6);
+  parent.add(group);
+
+  const panel = new THREE.Mesh(
+    new THREE.BoxGeometry(2.4, 0.08, 1.25),
+    new THREE.MeshStandardMaterial({ color: 0xb7c9b7, roughness: 0.7, metalness: 0.12 })
+  );
+  panel.position.set(0, 1.4, 0);
+  group.add(panel);
+  const panelSupport = new THREE.Mesh(
+    new THREE.BoxGeometry(0.12, 1.3, 0.12),
+    new THREE.MeshStandardMaterial({ color: 0x566357, roughness: 0.6 })
+  );
+  panelSupport.position.set(-0.7, 0.7, 0.35);
+  group.add(panelSupport);
+  panelSupport.clone().position.set(0.7, 0.7, 0.35);
+  group.add(panelSupport.clone());
+
+  const controller = new THREE.Mesh(
+    new THREE.BoxGeometry(0.6, 0.22, 0.38),
+    new THREE.MeshStandardMaterial({ color: 0x4d5e56, roughness: 0.6 })
+  );
+  controller.position.set(0, 0.72, 0.2);
+  group.add(controller);
+
+  const battery = new THREE.Mesh(
+    new THREE.BoxGeometry(0.72, 0.42, 0.44),
+    new THREE.MeshStandardMaterial({ color: 0x7d998c, roughness: 0.64 })
+  );
+  battery.position.set(0, 0.32, -0.2);
+  group.add(battery);
+
+  const dcBus = new THREE.Mesh(
+    new THREE.BoxGeometry(0.24, 0.12, 0.24),
+    new THREE.MeshStandardMaterial({ color: 0x7cc0b0, emissive: 0x08110e, roughness: 0.5 })
+  );
+  dcBus.position.set(0, 0.02, 0.68);
+  group.add(dcBus);
+
+  const panelLabel = createLabel('PANEL SOLAR', '#e4efe6', 0.18);
+  panelLabel.position.set(0, 1.9, 0.4);
+  group.add(panelLabel);
+  const controllerLabel = createLabel('CONTROLADOR', '#dfeade', 0.16);
+  controllerLabel.position.set(0, 1.02, 0.7);
+  group.add(controllerLabel);
+  const batteryLabel = createLabel('BATERÍA', '#dfeade', 0.16);
+  batteryLabel.position.set(0, 0.72, -0.02);
+  group.add(batteryLabel);
+  const dcLabel = createLabel('DISTRIBUCIÓN DC', '#dfeade', 0.15);
+  dcLabel.position.set(0, 0.3, 1.15);
+  group.add(dcLabel);
+
+  addCylinderBetween(THREE, group, [0, 1.23, 0], [0, 0.85, 0.2], 0.04, new THREE.MeshStandardMaterial({ color: 0x8dd0be, metalness: 0.2, roughness: 0.5 }), 8);
+  addCylinderBetween(THREE, group, [0, 0.72, 0.2], [0, 0.52, -0.2], 0.04, new THREE.MeshStandardMaterial({ color: 0x8dd0be, metalness: 0.2, roughness: 0.5 }), 8);
+  return { group, panel, controller, battery, dcBus };
+}
+
+function createZoneIrrigationActuators(THREE, zoneGroups, createLabel) {
+  const actuators = [];
+  const zoneNames = ['A', 'B', 'C'];
+  const zoneLength = GREENHOUSE.length / zoneNames.length;
+
+  zoneNames.forEach((zoneName, index) => {
+    const zoneGroup = zoneGroups[`zone${zoneName}`];
+    const centerZ = -GREENHOUSE.length / 2 + (index + 0.5) * zoneLength;
+    const actuator = new THREE.Group();
+    actuator.name = `irrigation-actuator-${zoneName}`;
+    actuator.position.set(-4.7, 0.4, centerZ + 1.2);
+
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 0.22, 0.36),
+      new THREE.MeshStandardMaterial({ color: 0x4b5d50, roughness: 0.5 })
+    );
+    actuator.add(body);
+    const coil = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.08, 0.08, 0.18, 8),
+      new THREE.MeshStandardMaterial({ color: 0x6b7d77, metalness: 0.6, roughness: 0.32 })
+    );
+    coil.rotation.x = Math.PI / 2;
+    coil.position.z = 0.18;
+    actuator.add(coil);
+    const label = createLabel(`ELECTROVÁLVULA ${zoneName}`, '#d9f0de', 0.16);
+    label.position.set(0, 0.4, 0.18);
+    actuator.add(label);
+    zoneGroup.add(actuator);
+    actuators.push(actuator);
+  });
+
+  return actuators;
 }
 
 function createEmitters(THREE, parent, bedCenters) {
@@ -1224,11 +1338,12 @@ export function createGreenhouseModel(THREE, createLabel) {
   const structure = createGreenhouseStructure(THREE, group);
   const cover = createGreenhouseCover(THREE, group);
   const ridgeVentilation = createRidgeVentilation(THREE, group, createLabel);
-  const lateralVentilation = createLateralVentilation(THREE, group);
+  const lateralVentilation = createLateralVentilation(THREE, group, createLabel);
   ridgeVentilation.lateralFlaps = lateralVentilation.lateralFlaps;
   const antechamber = createAntechamber(THREE, group, createLabel);
   const zones = createZoneGroups(THREE, group, createLabel);
   const irrigationService = createIrrigationService(THREE, group, createLabel);
+  const irrigationActuators = createZoneIrrigationActuators(THREE, zones, createLabel);
   const serviceHighlight = new THREE.Mesh(
     new THREE.TorusGeometry(1.45, 0.028, 8, 64),
     new THREE.MeshBasicMaterial({ color: 0x6be6d0, transparent: true, opacity: 0.9, depthWrite: false })
@@ -1241,7 +1356,8 @@ export function createGreenhouseModel(THREE, createLabel) {
   const emitters = createEmitters(THREE, group, beds.centers);
   const updatePulses = createWaterPulses(THREE, group, beds.centers);
   const iotArchitecture = createIoTArchitecture(THREE, group, zones, beds.centers, createLabel);
-    const connectivity = createOutdoorConnectivity(THREE, group, iotArchitecture.esp32Nodes, createLabel);
+  const connectivity = createOutdoorConnectivity(THREE, group, iotArchitecture.esp32Nodes, createLabel);
+  const powerSystem = createPowerSystem(THREE, group, createLabel);
   const bedSelection = createBedSelection(THREE, group, beds.meshes);
   const irrigation = {
     serviceGroup: irrigationService.group,
@@ -1288,12 +1404,12 @@ export function createGreenhouseModel(THREE, createLabel) {
     'Sistema regulable ubicado en la cumbrera para favorecer la renovación natural del aire.', ridgeVentilation.group, [1, 1, 1], {
       focusPoint: [0, 4, 0], focusDistance: 11
     });
-  registerEducationalComponent('lateralVent', 'greenhouse', 'VENTILACIÓN LATERAL',
-    'Aperturas laterales protegidas con malla antiáfido; se muestran reducidas o abiertas junto con la ventilación cenital.', lateralVentilation.group, [1.8, 0.28, 0.65], {
+  registerEducationalComponent('lateralVent', 'greenhouse', 'CORTINA LATERAL · POSIBLE ACTUADOR',
+    'Cortina lateral conceptual como posible actuador de ventilación controlada, junto a la ventilación natural pasiva cenital.', lateralVentilation.group, [1.8, 0.28, 0.65], {
       focusPoint: [5, 1.5, 0], focusDistance: 9
     });
-  registerEducationalComponent('ventilation', 'greenhouse', 'VENTILACIÓN CENITAL + LATERAL',
-    'La ventilación regulable de cumbrera y las aperturas laterales con malla se muestran juntas.',
+  registerEducationalComponent('ventilation', 'greenhouse', 'VENTILACIÓN NATURAL / PASIVA + CORTINA LATERAL',
+    'La ventilación cenital queda como pasiva y la cortina lateral se incorpora como posible actuador controlado.',
     [ridgeVentilation.group, lateralVentilation.group], [1.5, 0.8, 1]);
   registerEducationalComponent('antechamber', 'greenhouse', 'ANTECÁMARA · DOBLE ACCESO',
     'Acceso exterior por puerta 1, antecámara y puerta 2 hacia el invernadero, como dos barreras de entrada.', antechamber, [0.12, 0.36, -1], {
@@ -1327,9 +1443,13 @@ export function createGreenhouseModel(THREE, createLabel) {
     'Seis laterales de goteo distribuidos sobre los seis camellones.', [...manifold.dripLines, emitters.mesh], [0.1, 1.9, 0.8]);
   registerEducationalComponent('irrigationSystem', 'irrigation', 'RIEGO POR GOTEO',
     'Entrada de agua → filtro → válvula → colector → seis laterales de goteo → purgas finales.',
-    [irrigationService.group, manifold.group], [1, 0.42, 0.38], { focusPoint: [0.4, 0.75, -2], focusDistance: 34 });
+    [irrigationService.group, manifold.group, ...irrigationActuators], [1, 0.42, 0.38], { focusPoint: [0.4, 0.75, -2], focusDistance: 34 });
   registerEducationalComponent('purges', 'irrigation', 'PURGAS',
     'Terminaciones de purga visibles al final de los laterales de goteo.', manifold.purgeGroup, [0.5, 1.2, 1.8]);
+  registerEducationalComponent('gateway', 'iot', 'GATEWAY IoT',
+    'Punto común de agregación para ESP32-A/B/C antes del sistema INVERNIA. Representación conceptual, no definitiva.', connectivity.gatewayGroup, [1.2, 0.6, 1], { focusPoint: [6.2, 1.5, 1.6], focusDistance: 10 });
+  registerEducationalComponent('powerSystem', 'iot', 'SISTEMA SOLAR / BATERÍA',
+    'Alimentación autónoma conceptual con panel solar, controlador, batería y distribución DC para la capa IoT.', powerSystem.group, [1.9, 0.5, 1], { focusPoint: [-7.4, 1.1, -1.6], focusDistance: 12 });
   registerEducationalComponent('biolPoint', 'irrigation', 'PUNTO DE APLICACIÓN DE BIOL',
     'Punto previsto para aplicación de biol diluido y previamente filtrado mediante inyector o aplicación manual. No es automatizado.', irrigationService.biolGroup, [1.7, 0.7, 1.2]);
   iotArchitecture.selectableDevices.forEach((device) => {
