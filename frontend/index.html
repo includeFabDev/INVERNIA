@@ -2653,32 +2653,12 @@
             controls.update();
         }
 
-        function canWalkTo(x, z, fromZ) {
+        function canWalkTo(x, z) {
             const dimensions = greenhouseModel.userData.dimensions;
-            const greenhouseHalfWidth = dimensions.width / 2 - 0.3;
-            const greenhouseHalfLength = dimensions.length / 2 - 0.45;
-            const exteriorDoor = greenhouseModel.userData.exteriorDoor;
-            const frontWallZ = -dimensions.length / 2;
-            const exteriorZ = exteriorDoor.exteriorDoorZ;
-            const antechamberHalfWidth = dimensions.antechamber.width / 2 - 0.3;
-            const outsideLimit = exteriorZ - dimensions.antechamber.length - 1.5;
-            const isInAntechamber = z < frontWallZ && z >= exteriorZ;
-            const isOutside = z < exteriorZ;
-
-            if (z > greenhouseHalfLength || z < outsideLimit) return false;
-            if (z >= frontWallZ && Math.abs(x) > greenhouseHalfWidth) return false;
-            if (isInAntechamber && Math.abs(x) > antechamberHalfWidth) return false;
-            if (isOutside && Math.abs(x) > greenhouseModel.userData.dimensions.width / 2 + 5) return false;
-
-            const crossedGreenhouseFrontWall = (fromZ >= frontWallZ && z < frontWallZ)
-                || (fromZ < frontWallZ && z >= frontWallZ);
-            if (crossedGreenhouseFrontWall && Math.abs(x) > exteriorDoor.doorwayHalfWidth) return false;
-
-            const crossedExteriorDoor = (fromZ >= exteriorZ && z < exteriorZ)
-                || (fromZ < exteriorZ && z >= exteriorZ);
-            if (crossedExteriorDoor
-                && (!exteriorDoor.isExteriorDoorOpen() || Math.abs(x) > exteriorDoor.doorwayHalfWidth)) return false;
-            return true;
+            const groundMargin = 7;
+            const maxX = dimensions.width / 2 + groundMargin;
+            const maxZ = dimensions.length / 2 + dimensions.antechamber.length + groundMargin;
+            return Math.abs(x) <= maxX && Math.abs(z) <= maxZ;
         }
 
         function updateFirstPersonWalk(dt) {
@@ -2702,9 +2682,9 @@
             walkCandidate.copy(camera.position);
 
             const nextX = walkCandidate.x + walkDirection.x * distance;
-            if (canWalkTo(nextX, walkCandidate.z, walkCandidate.z)) walkCandidate.x = nextX;
+            if (canWalkTo(nextX, walkCandidate.z)) walkCandidate.x = nextX;
             const nextZ = walkCandidate.z + walkDirection.z * distance;
-            if (canWalkTo(walkCandidate.x, nextZ, walkCandidate.z)) walkCandidate.z = nextZ;
+            if (canWalkTo(walkCandidate.x, nextZ)) walkCandidate.z = nextZ;
             camera.position.set(walkCandidate.x, walkEyeHeight, walkCandidate.z);
         }
 
