@@ -452,12 +452,12 @@ function createCropVisualEntry(THREE, cropRoot, assignment, bedCenters, plantCou
   group.name = `crop-plants-${assignment.slug}-${assignment.bed}`;
   group.position.x = bedCenters[Number(String(assignment.bed).replace('C', '')) - 1];
   const stemMesh = new THREE.InstancedMesh(
-    new THREE.CylinderGeometry(0.018, 0.035, 1, 6),
+    new THREE.CylinderGeometry(0.03, 0.05, 1, 6),
     new THREE.MeshStandardMaterial({
       color: category === 'leaf' ? 0x7e9d54 : 0x477b42,
       roughness: 0.82,
-      emissive: category === 'leaf' ? 0x253814 : 0x173514,
-      emissiveIntensity: 0.12
+      emissive: category === 'leaf' ? 0x45672b : 0x355d2c,
+      emissiveIntensity: 0.3
     }),
     plantCount
   );
@@ -467,7 +467,7 @@ function createCropVisualEntry(THREE, cropRoot, assignment, bedCenters, plantCou
       color: colors.leaf,
       roughness: 0.88,
       emissive: colors.leaf,
-      emissiveIntensity: 0.09
+      emissiveIntensity: 0.3
     }),
     plantCount * (category === 'leaf' ? 7 : 6)
   );
@@ -485,6 +485,9 @@ function createCropVisualEntry(THREE, cropRoot, assignment, bedCenters, plantCou
   leafMesh.name = `crop-leaves-${assignment.slug}-${assignment.bed}`;
   fruitMesh.name = `crop-fruits-${assignment.slug}-${assignment.bed}`;
   flowerMesh.name = `crop-flowers-${assignment.slug}-${assignment.bed}`;
+  [stemMesh, leafMesh, fruitMesh, flowerMesh].forEach((mesh) => {
+    mesh.frustumCulled = false;
+  });
   group.add(stemMesh, leafMesh, fruitMesh, flowerMesh);
   cropRoot.add(group);
 
@@ -517,8 +520,8 @@ function updateCropVisualEntry(THREE, entry, assignment) {
   const isFlowering = assignment.visualStage === 'flowering';
   const isFruiting = assignment.visualStage === 'fruiting';
   const height = entry.category === 'leaf'
-    ? 0.24 + progress * 0.52
-    : 0.32 + progress * 1.08;
+    ? 0.34 + progress * 0.5
+    : 0.48 + progress * 0.92;
   const horizontalScale = Math.min(
     1,
     assignment.plantLayout.plantSpacing / 1.4,
@@ -540,14 +543,14 @@ function updateCropVisualEntry(THREE, entry, assignment) {
     entry.stemMesh.setMatrixAt(plant, transform.matrix);
 
     const leavesPerPlant = entry.category === 'leaf'
-      ? Math.max(2, Math.round(2 + progress * 5))
-      : Math.max(2, Math.round(2 + progress * 4));
+      ? Math.max(3, Math.round(3 + progress * 4))
+      : Math.max(3, Math.round(3 + progress * 3));
     for (let leaf = 0; leaf < leavesPerPlant; leaf += 1) {
       const angle = (leaf / leavesPerPlant) * Math.PI * 2 + (plant % 3) * 0.45;
       const level = entry.category === 'leaf'
         ? 0.19 + (leaf % 4) * height * 0.17
-        : height * (0.3 + (leaf % 3) * 0.2);
-      const radius = entry.category === 'leaf' ? 0.18 + progress * 0.18 : 0.16 + progress * 0.1;
+        : height * (0.42 + (leaf % 3) * 0.16);
+      const radius = entry.category === 'leaf' ? 0.2 + progress * 0.18 : 0.18 + progress * 0.1;
       transform.position.set(
         x + Math.cos(angle) * radius * horizontalScale,
         GREENHOUSE.bedHeight + level,
@@ -555,9 +558,9 @@ function updateCropVisualEntry(THREE, entry, assignment) {
       );
       transform.rotation.set(0, -angle, entry.category === 'leaf' ? -0.16 : -0.32);
       transform.scale.set(
-        (entry.category === 'leaf' ? 0.27 + progress * 0.16 : 0.2 + progress * 0.08) * horizontalScale,
-        0.055 + progress * 0.02,
-        (entry.category === 'leaf' ? 0.17 + progress * 0.1 : 0.11) * horizontalScale
+        (entry.category === 'leaf' ? 0.31 + progress * 0.16 : 0.27 + progress * 0.08) * horizontalScale,
+        0.065 + progress * 0.02,
+        (entry.category === 'leaf' ? 0.2 + progress * 0.1 : 0.16) * horizontalScale
       );
       transform.updateMatrix();
       entry.leafMesh.setMatrixAt(leafIndex++, transform.matrix);
@@ -663,12 +666,12 @@ function createCropVisuals(THREE, parent, bedCenters, plan, createLabel) {
 
   parent.userData.updateCropAnimation = (elapsed) => {
     visuals.forEach((entry, index) => {
-      const amplitude = entry.visualStage === 'emergence' ? 0.025
-        : entry.visualStage === 'flowering' ? 0.05
-          : entry.visualStage === 'fruiting' ? 0.035 : 0.06;
+      const amplitude = entry.visualStage === 'emergence' ? 0.07
+        : entry.visualStage === 'flowering' ? 0.11
+          : entry.visualStage === 'fruiting' ? 0.08 : 0.12;
       const sway = Math.sin(elapsed * 1.4 + entry.animationPhase + index) * amplitude;
       entry.group.rotation.z = sway;
-      entry.group.scale.y = 1 + Math.abs(sway) * 0.25;
+      entry.group.scale.y = 1 + Math.abs(sway) * 0.8;
     });
   };
 }

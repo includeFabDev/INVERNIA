@@ -2787,6 +2787,28 @@
             return true;
         }
 
+        function moveCameraToCropPlan(plan) {
+            if (!plan.length) return;
+            const bedIndexes = plan.map(({ bed }) => Number(String(bed).replace('C', '')) - 1);
+            const bedCenters = bedIndexes
+                .map((index) => greenhouseModel.userData.bedCenters[index])
+                .filter(Number.isFinite);
+            if (bedCenters.length === 0) return;
+
+            const centerX = bedCenters.reduce((total, x) => total + x, 0) / bedCenters.length;
+            const center = new THREE.Vector3(centerX, 0.7, -10);
+            const direction = new THREE.Vector3(0.05, 0.5, -1).normalize();
+            const distance = Math.max(8, 6 + bedCenters.length * 2);
+            tweenStartPos.copy(camera.position);
+            tweenEndPos.copy(center).addScaledVector(direction, distance);
+            tweenStartTarget.copy(controls.target);
+            tweenEndTarget.copy(center);
+            tweenProgress = 0;
+            tweenActive = true;
+            controls.enabled = false;
+            window.__inverniaFocusTarget = 'crop-plan';
+        }
+
         function updateCameraTween(dt) {
             if (!tweenActive) return;
             tweenProgress += dt / tweenDuration;
@@ -4167,7 +4189,10 @@
                 cropClockComplete = false;
                 cropClockLastRenderDate = '';
                 setCropClockEnabled(true);
-                renderCropPlanAt(cropClockBaseMs);
+                if (!renderCropPlanAt(cropClockBaseMs)) {
+                    throw new Error('No se pudo dibujar la distribución de cultivos.');
+                }
+                moveCameraToCropPlan(activeCropPlan);
                 setCropPlanMessage(
                     `Reloj fenológico sincronizado con el escenario. Crecimiento x${cropClockSpeedMultiplier}; datos preliminares.`
                 );
