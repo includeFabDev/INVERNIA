@@ -962,6 +962,24 @@
         .crop-layout-settings input { width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid rgba(255,255,255,0.14); border-radius: 7px; background: rgba(0,0,0,0.28); color: var(--fg); font: 11px 'Space Grotesk', sans-serif; }
         .crop-stage-events { display: grid; gap: 5px; margin: 8px 0; padding: 0; list-style: none; color: #bfe6f0; font-size: 11px; }
         .crop-stage-notification { min-height: 18px; margin-top: 7px; color: #b8efca; font-size: 11px; }
+        .crop-stage-toast {
+            position: fixed;
+            top: 76px;
+            left: 50%;
+            z-index: 90;
+            width: min(620px, calc(100vw - 32px));
+            padding: 13px 18px;
+            transform: translateX(-50%);
+            border: 1px solid rgba(102, 220, 143, 0.65);
+            border-radius: 12px;
+            background: rgba(12, 28, 17, 0.96);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.48);
+            color: #d8ffe2;
+            font: 600 13px/1.5 'Space Grotesk', sans-serif;
+            text-align: center;
+            pointer-events: none;
+        }
+        .crop-stage-toast[hidden] { display: none; }
         .crop-plan-status { min-height: 18px; color: #c5d5c8; font-size: 11px; line-height: 1.5; }
         .crop-plan-status[data-error="true"] { color: #ffb4a8; }
         .crop-map-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
@@ -1233,6 +1251,7 @@
 
     <!-- Viñeta -->
     <div class="vignette"></div>
+    <div class="crop-stage-toast" id="cropStageToast" role="status" aria-live="polite" hidden></div>
 
     <!-- Contenedor del canvas -->
     <div id="canvas-container"></div>
@@ -1273,16 +1292,16 @@
             </section>
             <section aria-labelledby="cropMapHeading">
                 <h3 class="crop-section-title" id="cropMapHeading">SELECCIONA QUÉ QUIERES SEMBRAR · MÁXIMO 6 CULTIVOS</h3>
-                <p class="crop-map-note">La fecha de siembra se captura por cultivo. El reloj de crecimiento avanza desde la siembra más temprana y es independiente del reloj del escenario: la iluminación y el ciclo día/noche siguen bajo el control ambiental. Las etapas y duraciones son preliminares.</p>
+                <p class="crop-map-note">La fecha de siembra se captura por cultivo. El crecimiento sigue el reloj del escenario activo; x1 mantiene la sincronización y x3/x7 acelera solo el crecimiento. Las etapas y duraciones son preliminares.</p>
                 <div class="crop-plan-controls">
                     <button class="quick-action" id="cropPlanGenerate" type="button">Generar sugerencia y visualizar</button>
                     <button class="quick-action" id="cropPlanClear" type="button">Limpiar visualización</button>
                     <label class="crop-clock-speed" for="cropClockSpeed">
-                        Velocidad
+                        Crecimiento
                         <select id="cropClockSpeed" disabled>
-                            <option value="1">1 día/segundo</option>
-                            <option value="3">3 días/segundo</option>
-                            <option value="7">7 días/segundo</option>
+                            <option value="1">Sincronizado x1</option>
+                            <option value="3">Acelerado x3</option>
+                            <option value="7">Acelerado x7</option>
                         </select>
                     </label>
                     <button class="quick-action" id="cropClockToggle" type="button" disabled>Iniciar reloj</button>
@@ -1557,10 +1576,10 @@
             calculatePlantLayout,
             createCropDistribution,
             estimateCropStage,
-            getAcceleratedTimestamp,
             getCropStageTransitions,
             getCropVisualStage,
-            getOverallPhenologyProgress
+            getOverallPhenologyProgress,
+            getScenarioSynchronizedTimestamp
         } from '/frontend/crop-planning.js';
 
         /* ==============================
@@ -3295,7 +3314,7 @@
             iluminancia_lux: 0, co2_ppm: 650, ph: 6.2, zonas: {},
             telemetryVariables: [],
             modoAutomatico: true, modoCalor: false, modoSeco: false,
-            horaVirtual: '18:45', timeScale: 1, fuenteDatos: 'simulation'
+            horaVirtual: '18:45', usarHoraReal: true, timeScale: 1, fuenteDatos: 'simulation'
         };
 
         // Debug HUD (para demo): muestra el estado que está leyendo el frontend
@@ -3688,13 +3707,20 @@
         let cropClockBaseMs = 0;
         let cropClockStartMs = 0;
         let cropClockEndMs = 0;
-        let cropClockDaysPerSecond = 1;
+        let cropClockScenarioStartMinutes = 0;
+        let cropClockScenarioStartRealMs = 0;
+        let cropClockScenarioMinutesPerSecond = 1 / 60;
+        let cropClockLastTimestampMs = 0;
+        let cropClockSpeedMultiplier = 1;
         let cropClockRunning = false;
         let cropClockComplete = false;
         let cropClockLastRenderDate = '';
         let cropCycleId = 0;
         const cropStageByAssignment = new Map();
         const cropStageEventKeys = new Set();
+        const cropStageToast = document.getElementById('cropStageToast');
+        const cropStageToastQueue = [];
+        let cropStageToastTimer = null;
         const cropClockSpeed = document.getElementById('cropClockSpeed');
         const cropClockToggle = document.getElementById('cropClockToggle');
         const cropClockReset = document.getElementById('cropClockReset');
@@ -3774,6 +3800,24 @@
             cropStageByAssignment.clear();
             cropStageEvents.replaceChildren();
             cropStageNotification.textContent = '';
+            cropStageToastQueue.length = 0;
+            if (cropStageToastTimer !== null) {
+                clearTimeout(cropStageToastTimer);
+                cropStageToastTimer = null;
+            }
+            cropStageToast.hidden = true;
+            cropStageToast.textContent = '';
+        }
+
+        function displayNextCropStageToast() {
+            if (cropStageToastQueue.length === 0) {
+                cropStageToast.hidden = true;
+                cropStageToastTimer = null;
+                return;
+            }
+            cropStageToast.textContent = cropStageToastQueue.shift();
+            cropStageToast.hidden = false;
+            cropStageToastTimer = setTimeout(displayNextCropStageToast, 5000);
         }
 
         function recordCropStageTransition(assignment, transition) {
@@ -3787,6 +3831,8 @@
             const simulatedDay = Math.max(0, Math.floor((transitionTime - cropClockStartMs) / 86400000));
             const message = `${assignment.crop.name} en ${assignment.bed}: ${transition.stage} · ${transitionDate} · día simulado ${simulatedDay}.`;
             cropStageNotification.textContent = message;
+            cropStageToastQueue.push(`🌱 Cambio de etapa · ${message}`);
+            if (cropStageToastTimer === null) displayNextCropStageToast();
             const eventItem = document.createElement('li');
             eventItem.textContent = message;
             cropStageEvents.prepend(eventItem);
@@ -3924,15 +3970,19 @@
 
         function currentCropClockMs(now = Date.now()) {
             if (!cropClockRunning) return cropClockBaseMs;
-            return getAcceleratedTimestamp(
+            const elapsedScenarioMinutes = simModeSelect.value === 'sim'
+                ? Math.max(0, sim.minutesOfDay - cropClockScenarioStartMinutes)
+                : (now - cropClockScenarioStartRealMs) / 1000 * cropClockScenarioMinutesPerSecond;
+            return getScenarioSynchronizedTimestamp(
                 cropClockBaseMs,
-                now - cropClockStartedAtMs,
-                cropClockDaysPerSecond,
+                elapsedScenarioMinutes,
+                cropClockSpeedMultiplier,
                 cropClockEndMs,
             );
         }
 
         function renderCropPlanAt(timestampMs) {
+            cropClockLastTimestampMs = timestampMs;
             const referenceDate = new Date(timestampMs).toISOString().slice(0, 10);
             let plantLayout;
             try {
@@ -4008,10 +4058,13 @@
                 plantLayout: assignment.plantLayout
             })));
             renderCropDistribution(planned);
+            const growthMode = cropClockSpeedMultiplier === 1
+                ? 'sincronizado con el escenario'
+                : `crecimiento acelerado x${cropClockSpeedMultiplier}`;
             cropClockDate.textContent = `Fecha virtual: ${referenceDate} · día ${Math.max(
                 0,
                 Math.floor((timestampMs - cropClockStartMs) / 86400000)
-            )} · crecimiento ${cropClockDaysPerSecond} día(s)/s · independiente del escenario`;
+            )} · ${growthMode}`;
             return true;
         }
 
@@ -4047,6 +4100,11 @@
         function startCropClock() {
             if (!activeCropPlan.length || cropClockComplete) return;
             cropClockStartedAtMs = Date.now();
+            cropClockScenarioStartMinutes = sim.minutesOfDay;
+            cropClockScenarioStartRealMs = cropClockStartedAtMs;
+            cropClockScenarioMinutesPerSecond = backendDevices.usarHoraReal === false
+                ? Math.max(0.001, Number(backendDevices.timeScale) || 1)
+                : 1 / 60;
             cropClockRunning = true;
             cropClockToggle.textContent = 'Pausar reloj';
             setCropClockEnabled(true);
@@ -4105,13 +4163,13 @@
                 }));
                 cropClockBaseMs = firstPlantingMs;
                 cropClockStartMs = firstPlantingMs;
-                cropClockDaysPerSecond = Number(cropClockSpeed.value);
+                cropClockSpeedMultiplier = Number(cropClockSpeed.value);
                 cropClockComplete = false;
                 cropClockLastRenderDate = '';
                 setCropClockEnabled(true);
                 renderCropPlanAt(cropClockBaseMs);
                 setCropPlanMessage(
-                    `Reloj fenológico iniciado desde la primera siembra. Avanza ${cropClockDaysPerSecond} día(s) virtual(es) por segundo; datos preliminares.`
+                    `Reloj fenológico sincronizado con el escenario. Crecimiento x${cropClockSpeedMultiplier}; datos preliminares.`
                 );
                 startCropClock();
             } catch (error) {
@@ -4179,7 +4237,12 @@
             const currentMs = currentCropClockMs();
             cropClockBaseMs = currentMs;
             cropClockStartedAtMs = Date.now();
-            cropClockDaysPerSecond = Number(cropClockSpeed.value);
+            cropClockScenarioStartMinutes = sim.minutesOfDay;
+            cropClockScenarioStartRealMs = cropClockStartedAtMs;
+            cropClockScenarioMinutesPerSecond = backendDevices.usarHoraReal === false
+                ? Math.max(0.001, Number(backendDevices.timeScale) || 1)
+                : 1 / 60;
+            cropClockSpeedMultiplier = Number(cropClockSpeed.value);
             renderCropPlanAt(currentMs);
             updateCropClock();
         });
@@ -4522,6 +4585,11 @@
             const profile = climateScenarios[scenario];
             simSpeedSelect.value = String(speed);
             sim.minutesOfDay = 13 * 60;
+            if (activeCropPlan.length && cropClockRunning) {
+                cropClockBaseMs = cropClockLastTimestampMs || cropClockBaseMs;
+                cropClockScenarioStartMinutes = sim.minutesOfDay;
+                cropClockScenarioStartRealMs = Date.now();
+            }
             sim.aire = false;
             sim.riego = false;
             sim.modoAutomatico = testMode === 'automatic';
@@ -5005,6 +5073,20 @@
                 const data = await response.json();
                 if (data?.devices) {
                     backendConnected = true;
+                    const nextScenarioUsesRealTime = data.devices.usarHoraReal !== false;
+                    const nextScenarioTimeScale = typeof data.devices.timeScale === 'number'
+                        && data.devices.timeScale > 0
+                        ? data.devices.timeScale
+                        : 1;
+                    const nextScenarioRate = nextScenarioUsesRealTime
+                        ? 1 / 60
+                        : Math.max(0.001, nextScenarioTimeScale);
+                    const previousCropTimestamp = activeCropPlan.length
+                        && cropClockRunning
+                        && simModeSelect.value === 'backend'
+                        ? currentCropClockMs()
+                        : null;
+                    const scenarioRateChanged = nextScenarioRate !== cropClockScenarioMinutesPerSecond;
                     backendDevices = {
                         luz: !!data.devices.luz,
                         aire: !!data.devices.aire,
@@ -5022,9 +5104,15 @@
                         modoSeco: !!data.devices.modoSeco,
                         modoAutomatico: data.devices.modoAutomatico !== false,
                         horaVirtual: data.devices.horaVirtual || '18:45',
-                        timeScale: typeof data.devices.timeScale === 'number' && data.devices.timeScale > 0 ? data.devices.timeScale : 1,
+                        usarHoraReal: data.devices.usarHoraReal !== false,
+                        timeScale: nextScenarioTimeScale,
                         fuenteDatos: data.devices.fuenteDatos || 'simulation'
                     };
+                    if (previousCropTimestamp !== null && scenarioRateChanged) {
+                        cropClockBaseMs = previousCropTimestamp;
+                        cropClockScenarioStartRealMs = Date.now();
+                        cropClockScenarioMinutesPerSecond = nextScenarioRate;
+                    }
                     console.log("[HTML] backendDevices updated:", backendDevices, "raw:", data);
                     if (debugHud) renderHud();
                     // Sincronizar el selector local con el timeScale que viene del backend
@@ -5092,9 +5180,20 @@
         // Inicial y al cambiar el modo
         startCronPingerIfBackend();
         simModeSelect.addEventListener('change', () => {
+            const currentCropTimestamp = activeCropPlan.length && cropClockRunning
+                ? cropClockLastTimestampMs || cropClockBaseMs
+                : null;
             if (simModeSelect.value === 'sim') {
                 syncLocalSimulationFromBackend();
                 captureLocalHistory(true);
+            }
+            if (currentCropTimestamp !== null) {
+                cropClockBaseMs = currentCropTimestamp;
+                cropClockScenarioStartMinutes = sim.minutesOfDay;
+                cropClockScenarioStartRealMs = Date.now();
+                cropClockScenarioMinutesPerSecond = backendDevices.usarHoraReal === false
+                    ? Math.max(0.001, Number(backendDevices.timeScale) || 1)
+                    : 1 / 60;
             }
             startCronPingerIfBackend();
             renderSensorCards();

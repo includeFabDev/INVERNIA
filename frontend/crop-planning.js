@@ -13,6 +13,16 @@ export function getAcceleratedTimestamp(baseMs, elapsedRealMs, daysPerSecond, en
   return Math.min(endMs, baseMs + elapsedRealMs * daysPerSecond * 86400);
 }
 
+export function getScenarioSynchronizedTimestamp(baseMs, elapsedScenarioMinutes, growthMultiplier, endMs) {
+  if (![baseMs, elapsedScenarioMinutes, growthMultiplier, endMs].every(Number.isFinite)
+    || elapsedScenarioMinutes < 0
+    || growthMultiplier <= 0
+    || endMs < baseMs) {
+    throw new TypeError('Valid scenario clock values are required');
+  }
+  return Math.min(endMs, baseMs + elapsedScenarioMinutes * 60000 * growthMultiplier);
+}
+
 export function createCropDistribution(selectedSlugs, catalog) {
   if (!Array.isArray(selectedSlugs) || !Array.isArray(catalog)) {
     throw new TypeError('Selected crops and catalog must be arrays');

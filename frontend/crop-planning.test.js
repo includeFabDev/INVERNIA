@@ -9,7 +9,8 @@ import {
   getCropStageTransitions,
   getCropVisualStage,
   getLocalCalendarDate,
-  getOverallPhenologyProgress
+  getOverallPhenologyProgress,
+  getScenarioSynchronizedTimestamp
 } from './crop-planning.js';
 import { CROP_DISTRIBUTION_DEFAULTS } from './greenhouse-model.js';
 
@@ -110,6 +111,16 @@ test('advances and caps the isolated crop clock at its configured virtual-day sp
   assert.equal(getAcceleratedTimestamp(start, 2000, 7, end), start + 14 * 86400000);
   assert.equal(getAcceleratedTimestamp(start, 10000, 30, end), end);
   assert.throws(() => getAcceleratedTimestamp(start, 1000, 0, end), TypeError);
+});
+
+test('advances crop dates from scenario-clock minutes and optional growth acceleration', () => {
+  const start = Date.UTC(2026, 9, 12);
+  const end = start + 30 * 86400000;
+
+  assert.equal(getScenarioSynchronizedTimestamp(start, 60, 1, end), start + 3600000);
+  assert.equal(getScenarioSynchronizedTimestamp(start, 60, 3, end), start + 10800000);
+  assert.equal(getScenarioSynchronizedTimestamp(start, 50000, 1, end), end);
+  assert.throws(() => getScenarioSynchronizedTimestamp(start, -1, 1, end), TypeError);
 });
 
 test('estimates fruit and leaf stages from each profile duration at a simulated date', () => {
