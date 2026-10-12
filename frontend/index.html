@@ -915,6 +915,72 @@
             box-shadow: 0 0 0 1px rgba(105, 230, 208, 0.18);
         }
 
+        .crop-dialog {
+            width: min(1080px, calc(100vw - 24px));
+            max-height: min(90vh, 900px);
+            margin: auto;
+            padding: 0;
+            overflow: hidden;
+            border: 1px solid rgba(105, 230, 208, 0.3);
+            border-radius: 16px;
+            background: rgba(8, 15, 11, 0.97);
+            color: var(--fg);
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.62);
+        }
+
+        .crop-dialog::backdrop { background: rgba(0, 0, 0, 0.72); backdrop-filter: blur(5px); }
+        .crop-dialog-inner { max-height: min(90vh, 900px); overflow-y: auto; padding: 22px; }
+        .crop-dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+        .crop-dialog-header h2 { margin: 8px 0 4px; font-size: clamp(20px, 3vw, 28px); }
+        .crop-dialog-header p { color: var(--muted); font-size: 12px; line-height: 1.5; }
+        .crop-close {
+            flex: 0 0 auto;
+            width: 36px;
+            height: 36px;
+            border: 1px solid var(--border);
+            border-radius: 9px;
+            background: rgba(255,255,255,0.05);
+            color: var(--fg);
+            font-size: 22px;
+            cursor: pointer;
+        }
+        .crop-callout {
+            margin: 16px 0;
+            padding: 12px 14px;
+            border: 1px solid rgba(255, 190, 90, 0.3);
+            border-radius: 10px;
+            background: rgba(255, 190, 90, 0.07);
+            color: #eeddbd;
+            font-size: 12px;
+            line-height: 1.55;
+        }
+        .crop-section-title { margin: 20px 0 10px; color: #b8efca; font-size: 13px; letter-spacing: 0.08em; }
+        .crop-status { margin: 10px 0; color: #b8c7bc; font-size: 12px; }
+        .crop-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(245px, 1fr)); gap: 10px; }
+        .crop-card {
+            padding: 14px;
+            border: 1px solid rgba(255,255,255,0.09);
+            border-radius: 11px;
+            background: rgba(255,255,255,0.035);
+        }
+        .crop-card h4 { margin: 0 0 3px; font-size: 15px; }
+        .crop-card .crop-scientific { color: #a7b7aa; font-size: 11px; font-style: italic; }
+        .crop-card .crop-meta { margin-top: 9px; color: #d1ddd3; font-size: 11px; line-height: 1.5; }
+        .crop-card .crop-stages { margin-top: 8px; color: var(--muted); font-size: 10px; line-height: 1.55; }
+        .crop-card .crop-validation { margin-top: 9px; color: #f0cf91; font-size: 10px; line-height: 1.45; }
+        .crop-map-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+        .crop-map { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 11px; text-align: left; }
+        .crop-map th, .crop-map td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+        .crop-map th { background: rgba(46,204,113,0.08); color: #b8efca; }
+        .crop-map td { color: #dce5dd; }
+        .crop-map tr:last-child td { border-bottom: 0; }
+        .crop-map-note { margin-top: 10px; color: var(--muted); font-size: 11px; line-height: 1.55; }
+
+        @media (max-width: 600px) {
+            .crop-dialog-inner { padding: 16px 12px; }
+            .crop-grid { grid-template-columns: 1fr; }
+        }
+
         .walk-hud {
             position: fixed;
             left: 20px;
@@ -1187,7 +1253,50 @@
         <button class="quick-action" type="button" data-action="explore">Explorar</button>
         <button class="quick-action" type="button" data-action="tour">Recorrido guiado</button>
         <button class="quick-action" type="button" data-action="walk">Caminar</button>
+        <button class="quick-action" type="button" id="cropCatalogOpen" data-action="crops" aria-haspopup="dialog" aria-controls="cropDialog">Cultivos</button>
     </div>
+
+    <dialog class="crop-dialog" id="cropDialog" aria-labelledby="cropDialogTitle">
+        <div class="crop-dialog-inner">
+            <header class="crop-dialog-header">
+                <div>
+                    <div class="explorer-badge">CATÁLOGO PRELIMINAR · 7 CULTIVOS</div>
+                    <h2 id="cropDialogTitle">Perfiles y propuesta de distribución</h2>
+                    <p>Perfiles informativos y un esquema de camellones para revisión. La propuesta no se guarda ni activa en el sistema.</p>
+                </div>
+                <button class="crop-close" id="cropDialogClose" type="button" aria-label="Cerrar perfiles de cultivo">×</button>
+            </header>
+            <div class="crop-callout">
+                <strong>Importante:</strong> las etapas, duraciones, necesidades hídricas y compatibilidades siguen pendientes de validación agronómica.
+                La distribución inferior es solo una propuesta preliminar basada en metadatos heredados. Los seis camellones atraviesan las zonas A, B y C;
+                las tres zonas no son grupos de camellones y todo el invernadero conserva un único sector de riego.
+            </div>
+            <div class="crop-status" id="cropCatalogStatus" role="status" aria-live="polite">Cargando perfiles…</div>
+            <section aria-labelledby="cropProfilesHeading">
+                <h3 class="crop-section-title" id="cropProfilesHeading">PERFILES DE CULTIVO</h3>
+                <div class="crop-grid" id="cropProfileCards"></div>
+            </section>
+            <section aria-labelledby="cropMapHeading">
+                <h3 class="crop-section-title" id="cropMapHeading">PROPUESTA PARA REVISIÓN · C1–C6</h3>
+                <div class="crop-map-wrap">
+                    <table class="crop-map">
+                        <thead>
+                            <tr><th>Camellón longitudinal</th><th>Zona A</th><th>Zona B</th><th>Zona C</th></tr>
+                        </thead>
+                        <tbody id="cropDistributionRows"></tbody>
+                    </table>
+                </div>
+                <p class="crop-map-note">
+                    Propuesta: C1 tomate + lechuga (asociación marcada como compatible en el catálogo preliminar); C2 pimentón; C3 locoto;
+                    C4 pepino; C5 acelga; C6 espinaca. Cada cultivo en una fila recorre A/B/C. No se asignan superficies ni válvulas individuales.
+                    Antes de aprobarla hay que revisar competencia por luz/espacio, necesidades de agua y el riego común.
+                </p>
+            </section>
+            <div class="crop-callout">
+                El gemelo digital sí anima otros elementos (por ejemplo, el ventilador y la cámara), pero actualmente no dibuja plantas ni animación de crecimiento.
+            </div>
+        </div>
+    </dialog>
 
     <div class="walk-hud" id="walkHud" hidden>
         <strong>PRIMERA PERSONA</strong>
@@ -2796,6 +2905,11 @@
         const layerElements = document.getElementById('layerElements');
         const navBtns = document.querySelectorAll('.nav-btn');
         const quickActions = document.querySelectorAll('.quick-action');
+        const cropDialog = document.getElementById('cropDialog');
+        const cropCatalogStatus = document.getElementById('cropCatalogStatus');
+        const cropProfileCards = document.getElementById('cropProfileCards');
+        const cropDistributionRows = document.getElementById('cropDistributionRows');
+        let cropCatalogCache = null;
         const explorerPanel = document.getElementById('explorerPanel');
         const explorerList = document.getElementById('explorerList');
         const explorerClose = document.getElementById('explorerClose');
@@ -3559,6 +3673,112 @@
                     return;
                 }
             });
+        });
+
+        const proposedBedAssignments = [
+            { bed: 'C1', crops: ['tomate', 'lechuga'] },
+            { bed: 'C2', crops: ['pimenton'] },
+            { bed: 'C3', crops: ['locoto'] },
+            { bed: 'C4', crops: ['pepino'] },
+            { bed: 'C5', crops: ['acelga'] },
+            { bed: 'C6', crops: ['espinaca'] }
+        ];
+
+        function addCropText(parent, tagName, text, className) {
+            const element = document.createElement(tagName);
+            element.textContent = text;
+            if (className) element.className = className;
+            parent.appendChild(element);
+            return element;
+        }
+
+        function renderCropDistribution(crops) {
+            const cropNames = new Map(crops.map((crop) => [crop.slug, crop.name]));
+            cropDistributionRows.replaceChildren();
+            for (const assignment of proposedBedAssignments) {
+                const row = document.createElement('tr');
+                addCropText(row, 'th', `CAMELLÓN ${assignment.bed}`, '');
+                const assignmentLabel = assignment.crops
+                    .map((slug) => cropNames.get(slug))
+                    .filter(Boolean)
+                    .join(' + ');
+                for (const _zone of ['A', 'B', 'C']) {
+                    addCropText(row, 'td', assignmentLabel || 'Sin asignación disponible', '');
+                }
+                cropDistributionRows.appendChild(row);
+            }
+        }
+
+        function renderCropProfiles(crops) {
+            cropProfileCards.replaceChildren();
+            for (const crop of crops) {
+                const card = document.createElement('article');
+                card.className = 'crop-card';
+                addCropText(card, 'h4', crop.name);
+                addCropText(card, 'div', crop.scientificName, 'crop-scientific');
+                addCropText(
+                    card,
+                    'div',
+                    `${crop.family} · ${crop.categoryLabel || crop.category}`,
+                    'crop-meta'
+                );
+                addCropText(
+                    card,
+                    'div',
+                    `Agua: ${crop.waterNeed || 'sin dato'} · Riesgo con riego compartido: ${crop.irrigationConflictRisk || 'sin evaluar'}`,
+                    'crop-meta'
+                );
+                const stageSummary = Array.isArray(crop.phenology)
+                    ? crop.phenology.map((stage) => `${stage.name}: ${stage.durationDays} d`).join(' · ')
+                    : 'Etapas no disponibles.';
+                addCropText(card, 'div', stageSummary, 'crop-stages');
+                addCropText(
+                    card,
+                    'div',
+                    `${crop.validationStatus === 'preliminary' ? 'PRELIMINAR' : crop.validationStatus || 'VALIDACIÓN PENDIENTE'} · ${crop.validationNotes || 'Requiere revisión.'}`,
+                    'crop-validation'
+                );
+                cropProfileCards.appendChild(card);
+            }
+        }
+
+        async function loadCropCatalog() {
+            if (cropCatalogCache) {
+                renderCropProfiles(cropCatalogCache);
+                renderCropDistribution(cropCatalogCache);
+                return;
+            }
+
+            cropCatalogStatus.textContent = 'Cargando perfiles desde el catálogo del backend…';
+            try {
+                const response = await fetch('/api/crops', { cache: 'no-store' });
+                if (!response.ok) throw new Error(`GET /api/crops respondió HTTP ${response.status}`);
+                const payload = await response.json();
+                if (!Array.isArray(payload.crops) || payload.crops.length !== 7) {
+                    throw new Error('La respuesta del catálogo no contiene exactamente siete perfiles');
+                }
+                cropCatalogCache = payload.crops;
+                renderCropProfiles(cropCatalogCache);
+                renderCropDistribution(cropCatalogCache);
+                cropCatalogStatus.textContent = `${payload.totalCrops} perfiles cargados · datos agronómicos preliminares`;
+            } catch (error) {
+                console.error('[crop catalog] No se pudieron cargar los perfiles', error);
+                cropCatalogStatus.textContent = 'No se pudieron cargar los perfiles. Verifica que el backend/API esté disponible y vuelve a abrir esta ventana.';
+            }
+        }
+
+        document.getElementById('cropCatalogOpen').addEventListener('click', () => {
+            setQuickActionState('crops');
+            if (!cropDialog.open) cropDialog.showModal();
+            loadCropCatalog();
+        });
+        document.getElementById('cropDialogClose').addEventListener('click', () => {
+            cropDialog.close();
+            setQuickActionState(null);
+        });
+        cropDialog.addEventListener('close', () => setQuickActionState(null));
+        cropDialog.addEventListener('click', (event) => {
+            if (event.target === cropDialog) cropDialog.close();
         });
 
         // ==============================
