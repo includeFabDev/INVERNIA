@@ -7,6 +7,10 @@
         "/^node --check frontend\\\\greenhouse-model\\.js; if \\(\\$\\?\\) \\{ Write-Output 'greenhouse-model\\.js: syntax OK' \\}$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^node --test frontend\\\\crop-planning\\.test\\.js$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

@@ -1,6 +1,7 @@
 const BED_COUNT = 6;
 const ZONES = ['A', 'B', 'C'];
 const MILLISECONDS_PER_DAY = 86400000;
+const MAX_VISUALIZED_PLANTS_PER_BED = 500;
 
 export function getAcceleratedTimestamp(baseMs, elapsedRealMs, daysPerSecond, endMs) {
   if (![baseMs, elapsedRealMs, daysPerSecond, endMs].every(Number.isFinite)
@@ -35,6 +36,87 @@ export function createCropDistribution(selectedSlugs, catalog) {
   });
 }
 
+export function calculatePlantLayout({
+  bedLength,
+  bedWidth,
+  plantSpacing,
+  rowSpacing,
+  edgeMargin
+}) {
+  const values = [bedLength, bedWidth, plantSpacing, rowSpacing, edgeMargin];
+  if (!values.every(Number.isFinite)
+    || bedLength <= 0
+    || bedWidth <= 0
+    || plantSpacing <= 0
+    || rowSpacing <= 0
+    || edgeMargin < 0) {
+    throw new TypeError('Positive bed dimensions and spacing values are required');
+  }
+
+  if (bedWidth / 2 <= edgeMargin) {
+    throw new RangeError('The edge margin leaves no room for a plant row');
+  }
+  const horizontalScale = Math.min(
+    1,
+    plantSpacing / 1.4,
+    rowSpacing / 1.4,
+    (bedWidth / 2 - edgeMargin) / 0.7
+  );
+  const canopyClearance = 0.7 * horizontalScale;
+  const usableLength = bedLength - 2 * (edgeMargin + canopyClearance);
+  const usableWidth = bedWidth - 2 * (edgeMargin + canopyClearance);
+  if (usableLength < 0 || usableWidth < 0) {
+    throw new RangeError('The edge margin leaves no room for the plant canopy');
+  }
+
+  const columns = Math.floor((usableLength + Number.EPSILON) / plantSpacing) + 1;
+  const rows = Math.floor((usableWidth + Number.EPSILON) / rowSpacing) + 1;
+  const plantCount = rows * columns;
+  const visualRows = Math.min(
+    rows,
+    MAX_VISUALIZED_PLANTS_PER_BED,
+    Math.max(1, Math.floor(Math.sqrt(MAX_VISUALIZED_PLANTS_PER_BED * rows / columns)))
+  );
+  const visualColumns = Math.min(
+    columns,
+    Math.max(1, Math.floor(MAX_VISUALIZED_PLANTS_PER_BED / visualRows))
+  );
+  const rowIndexes = Array.from({ length: visualRows }, (_, index) => (
+    visualRows === 1
+      ? Math.floor((rows - 1) / 2)
+      : Math.round(index * (rows - 1) / (visualRows - 1))
+  ));
+  const columnIndexes = Array.from({ length: visualColumns }, (_, index) => (
+    visualColumns === 1
+      ? Math.floor((columns - 1) / 2)
+      : Math.round(index * (columns - 1) / (visualColumns - 1))
+  ));
+  const positions = [];
+  for (const row of rowIndexes) {
+    const x = rows === 1
+      ? 0
+      : -((rows - 1) * rowSpacing) / 2 + row * rowSpacing;
+    for (const column of columnIndexes) {
+      const z = columns === 1
+        ? 0
+        : -((columns - 1) * plantSpacing) / 2 + column * plantSpacing;
+      positions.push({ x, z });
+    }
+  }
+  return {
+    bedLength,
+    bedWidth,
+    plantSpacing,
+    rowSpacing,
+    edgeMargin,
+    rows,
+    columns,
+    plantCount,
+    visualPlantCount: positions.length,
+    positions
+  };
+}
+
 export function getOverallPhenologyProgress(crop, stageResult) {
   if (!crop || !Array.isArray(crop.phenology) || !stageResult) return 0;
   const totalDuration = crop.phenology.reduce(
@@ -63,14 +145,20 @@ export function estimateCropStage(crop, plantDate, referenceDate) {
   );
   let cumulativeDays = 0;
   let currentStage = crop.phenology[0];
-  for (const stage of crop.phenology) {
+  let currentStageIndex = 0;
+  for (const [index, stage] of crop.phenology.entries()) {
     currentStage = stage;
+    currentStageIndex = index;
     if (daysElapsed <= cumulativeDays + stage.durationDays) break;
     cumulativeDays += stage.durationDays;
   }
 
   const stageDurationDays = Number(currentStage.durationDays) || 1;
   const stageElapsed = Math.max(0, daysElapsed - cumulativeDays);
+  const nextStage = crop.phenology[currentStageIndex + 1] || null;
+  const daysToNextStage = nextStage
+    ? Math.max(0, cumulativeDays + stageDurationDays + 1 - daysElapsed)
+    : null;
   return {
     stage: currentStage.name,
     stageCode: currentStage.code,
@@ -78,9 +166,45 @@ export function estimateCropStage(crop, plantDate, referenceDate) {
     totalDuration,
     stageDurationDays,
     stageStartDay: cumulativeDays,
+    nextStage: nextStage?.name || null,
+    daysToNextStage,
+    daysToHarvest: Math.max(0, totalDuration - daysElapsed),
+    estimatedHarvestDate: new Date(plantTime + totalDuration * MILLISECONDS_PER_DAY)
+      .toISOString()
+      .slice(0, 10),
     percentage: Number(Math.min(100, (stageElapsed / stageDurationDays) * 100).toFixed(1)),
     stageEvidenceStatus: currentStage.durationEvidenceStatus || 'pending_verification'
   };
+}
+
+export function getCropStageTransitions(crop, fromDay, toDay) {
+  if (!crop || !Array.isArray(crop.phenology)
+    || !Number.isFinite(fromDay) || !Number.isFinite(toDay)
+    || toDay < fromDay) {
+    throw new TypeError('A crop and an increasing day interval are required');
+  }
+
+  const transitions = [];
+  let boundaryDay = 0;
+  if (crop.phenology.length > 0 && fromDay < 0 && toDay >= 0) {
+    transitions.push({
+      stage: crop.phenology[0].name,
+      stageCode: crop.phenology[0].code,
+      day: 0
+    });
+  }
+  crop.phenology.forEach((stage, index) => {
+    const transitionDay = boundaryDay + 1;
+    if (index > 0 && fromDay < transitionDay && toDay >= transitionDay) {
+      transitions.push({
+        stage: stage.name,
+        stageCode: stage.code,
+        day: transitionDay
+      });
+    }
+    boundaryDay += Number(stage.durationDays) || 0;
+  });
+  return transitions;
 }
 
 export function getCropVisualStage(crop, stageResult) {

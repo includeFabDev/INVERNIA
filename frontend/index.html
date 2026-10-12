@@ -977,6 +977,11 @@
         .crop-clock-speed { display: flex; align-items: center; gap: 7px; color: #c5d5c8; font-size: 11px; }
         .crop-clock-speed select { padding: 7px 9px; border: 1px solid rgba(255,255,255,0.14); border-radius: 7px; background: #172119; color: var(--fg); font: 11px 'Space Grotesk', sans-serif; }
         .crop-clock-date { align-self: center; color: #b8efca; font-size: 11px; font-variant-numeric: tabular-nums; }
+        .crop-layout-settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 9px; margin: 12px 0; padding: 12px; border: 1px solid rgba(255,255,255,0.09); border-radius: 10px; }
+        .crop-layout-settings label { display: grid; gap: 5px; color: #aab9ad; font-size: 10px; }
+        .crop-layout-settings input { width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid rgba(255,255,255,0.14); border-radius: 7px; background: rgba(0,0,0,0.28); color: var(--fg); font: 11px 'Space Grotesk', sans-serif; }
+        .crop-stage-events { display: grid; gap: 5px; margin: 8px 0; padding: 0; list-style: none; color: #bfe6f0; font-size: 11px; }
+        .crop-stage-notification { min-height: 18px; margin-top: 7px; color: #b8efca; font-size: 11px; }
         .crop-plan-status { min-height: 18px; color: #c5d5c8; font-size: 11px; line-height: 1.5; }
         .crop-plan-status[data-error="true"] { color: #ffb4a8; }
         .crop-map-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
@@ -1289,7 +1294,7 @@
             </section>
             <section aria-labelledby="cropMapHeading">
                 <h3 class="crop-section-title" id="cropMapHeading">SELECCIONA QUÉ QUIERES SEMBRAR · MÁXIMO 6 CULTIVOS</h3>
-                <p class="crop-map-note">La fecha de siembra se captura por cultivo. El reloj acelerado de esta vista inicia en la siembra más temprana y avanza días virtuales; no modifica el reloj de escenarios ni el estado del invernadero. Las etapas y duraciones son preliminares.</p>
+                <p class="crop-map-note">La fecha de siembra se captura por cultivo. El reloj de crecimiento avanza desde la siembra más temprana y es independiente del reloj del escenario: la iluminación y el ciclo día/noche siguen bajo el control ambiental. Las etapas y duraciones son preliminares.</p>
                 <div class="crop-plan-controls">
                     <button class="quick-action" id="cropPlanGenerate" type="button">Generar sugerencia y visualizar</button>
                     <button class="quick-action" id="cropPlanClear" type="button">Limpiar visualización</button>
@@ -1305,12 +1310,23 @@
                     <button class="quick-action" id="cropClockReset" type="button" disabled>Volver al día 0</button>
                     <output class="crop-clock-date" id="cropClockDate" aria-live="off">Sin simulación activa</output>
                 </div>
+                <fieldset class="crop-layout-settings">
+                    <legend class="crop-section-title">DISTRIBUCIÓN ESTIMADA · CONFIGURACIÓN ILUSTRATIVA, NO VALIDADA</legend>
+                    <label>Longitud del camellón (m)<input id="cropBedLength" type="number" min="1" step="0.05"></label>
+                    <label>Ancho del camellón (m)<input id="cropBedWidth" type="number" min="0.5" step="0.05"></label>
+                    <label>Distancia entre plantas (m)<input id="cropPlantSpacing" type="number" min="0.05" step="0.05"></label>
+                    <label>Distancia entre hileras (m)<input id="cropRowSpacing" type="number" min="0.05" step="0.05"></label>
+                    <label>Margen adicional desde los bordes (m)<input id="cropEdgeMargin" type="number" min="0" step="0.05"></label>
+                    <p class="crop-map-note" style="grid-column: 1 / -1;">Los valores iniciales derivan de la huella y densidad visual existentes; no describen medidas reales ni recomendaciones agronómicas. El cálculo se limita al tamaño actual dibujado del camellón.</p>
+                </fieldset>
+                <div class="crop-stage-notification" id="cropStageNotification" role="status" aria-live="polite"></div>
+                <ul class="crop-stage-events" id="cropStageEvents" role="log" aria-live="polite" aria-label="Eventos de transición fenológica"></ul>
                 <div class="crop-plan-status" id="cropPlanStatus" role="status" aria-live="polite">Selecciona uno o más cultivos y define sus fechas de siembra.</div>
                 <h3 class="crop-section-title">DISTRIBUCIÓN PROPUESTA · CADA FILA RECORRE A/B/C</h3>
                 <div class="crop-map-wrap">
                     <table class="crop-map">
-                        <thead><tr><th>Camellón</th><th>Zona A</th><th>Zona B</th><th>Zona C</th></tr></thead>
-                        <tbody id="cropDistributionRows"><tr><td colspan="4">Aún no se generó una propuesta.</td></tr></tbody>
+                        <thead><tr><th>Camellón</th><th>Zona A</th><th>Zona B</th><th>Zona C</th><th>Plantas estimadas</th></tr></thead>
+                        <tbody id="cropDistributionRows"><tr><td colspan="5">Aún no se generó una propuesta.</td></tr></tbody>
                     </table>
                 </div>
                 <p class="crop-map-note">
@@ -1568,11 +1584,16 @@
         import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
         import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-        import { createGreenhouseModel } from '/frontend/greenhouse-model.js';
         import {
+            CROP_DISTRIBUTION_DEFAULTS,
+            createGreenhouseModel
+        } from '/frontend/greenhouse-model.js';
+        import {
+            calculatePlantLayout,
             createCropDistribution,
             estimateCropStage,
             getAcceleratedTimestamp,
+            getCropStageTransitions,
             getCropVisualStage,
             getOverallPhenologyProgress
         } from '/frontend/crop-planning.js';
@@ -2943,6 +2964,15 @@
         const cropCatalogStatus = document.getElementById('cropCatalogStatus');
         const cropProfileCards = document.getElementById('cropProfileCards');
         const cropDistributionRows = document.getElementById('cropDistributionRows');
+        const cropStageNotification = document.getElementById('cropStageNotification');
+        const cropStageEvents = document.getElementById('cropStageEvents');
+        const cropLayoutInputs = {
+            bedLength: document.getElementById('cropBedLength'),
+            bedWidth: document.getElementById('cropBedWidth'),
+            plantSpacing: document.getElementById('cropPlantSpacing'),
+            rowSpacing: document.getElementById('cropRowSpacing'),
+            edgeMargin: document.getElementById('cropEdgeMargin')
+        };
         let cropCatalogCache = null;
         const explorerPanel = document.getElementById('explorerPanel');
         const explorerList = document.getElementById('explorerList');
@@ -3720,11 +3750,22 @@
         let cropClockRunning = false;
         let cropClockComplete = false;
         let cropClockLastRenderDate = '';
+        let cropCycleId = 0;
+        const cropStageByAssignment = new Map();
+        const cropStageEventKeys = new Set();
         const cropClockSpeed = document.getElementById('cropClockSpeed');
         const cropClockToggle = document.getElementById('cropClockToggle');
         const cropClockReset = document.getElementById('cropClockReset');
         const cropClockDate = document.getElementById('cropClockDate');
+        const cropPlanStatus = document.getElementById('cropPlanStatus');
         const cropPlanGenerate = document.getElementById('cropPlanGenerate');
+
+        Object.entries(CROP_DISTRIBUTION_DEFAULTS).forEach(([key, value]) => {
+            cropLayoutInputs[key].value = String(Number(value.toFixed(2)));
+            if (key === 'bedLength' || key === 'bedWidth') {
+                cropLayoutInputs[key].max = String(value);
+            }
+        });
 
         function addCropText(parent, tagName, text, className) {
             const element = document.createElement(tagName);
@@ -3745,13 +3786,70 @@
                 const stage = assignment
                     ? `${assignment.stage.stage}${assignment.stage.stageCode ? ` (${assignment.stage.stageCode})` : ''} · día ${assignment.stage.daysElapsed}`
                     : 'Vacío';
+                const milestone = assignment
+                    ? assignment.stage.nextStage
+                        ? `Próximo hito: ${assignment.stage.nextStage} · ~${assignment.stage.daysToNextStage} d`
+                        : `Cosecha estimada: ${assignment.stage.estimatedHarvestDate} · ~${assignment.stage.daysToHarvest} d`
+                    : '';
                 for (const zone of ['A', 'B', 'C']) {
                     const content = assignment
-                        ? `${assignment.crop.name} · ${stage} · siembra ${assignment.plantDate}`
+                        ? `${assignment.crop.name} · Etapa: ${stage} · ${milestone} · siembra ${assignment.plantDate}`
                         : 'Sin cultivo';
                     addCropText(row, 'td', content, '');
                 }
+                addCropText(
+                    row,
+                    'td',
+                    assignment
+                        ? `${assignment.plantLayout.plantCount} · Distribución estimada${
+                            assignment.plantLayout.visualPlantCount < assignment.plantLayout.plantCount
+                                ? ` · 3D muestra ${assignment.plantLayout.visualPlantCount}`
+                                : ''
+                        }`
+                        : '—',
+                    ''
+                );
                 cropDistributionRows.appendChild(row);
+            }
+        }
+
+        function getCropLayoutSettings() {
+            const settings = Object.fromEntries(
+                Object.entries(cropLayoutInputs).map(([key, input]) => [key, Number(input.value)])
+            );
+            if (!Object.values(settings).every(Number.isFinite)) {
+                throw new TypeError('Completa todas las medidas y separaciones con valores numéricos.');
+            }
+            if (settings.bedLength > CROP_DISTRIBUTION_DEFAULTS.bedLength
+                || settings.bedWidth > CROP_DISTRIBUTION_DEFAULTS.bedWidth) {
+                throw new RangeError('La distribución no puede superar el tamaño actualmente dibujado del camellón.');
+            }
+            return calculatePlantLayout(settings);
+        }
+
+        function clearCropStageEvents() {
+            cropStageEventKeys.clear();
+            cropStageByAssignment.clear();
+            cropStageEvents.replaceChildren();
+            cropStageNotification.textContent = '';
+        }
+
+        function recordCropStageTransition(assignment, transition) {
+            const eventKey = `${cropCycleId}:${assignment.bed}:${assignment.crop.slug}:${transition.stageCode}:${transition.day}`;
+            if (cropStageEventKeys.has(eventKey)) return;
+            cropStageEventKeys.add(eventKey);
+
+            const transitionTime = Date.parse(`${assignment.plantDate}T00:00:00Z`)
+                + transition.day * 86400000;
+            const transitionDate = new Date(transitionTime).toISOString().slice(0, 10);
+            const simulatedDay = Math.max(0, Math.floor((transitionTime - cropClockStartMs) / 86400000));
+            const message = `${assignment.crop.name} en ${assignment.bed}: ${transition.stage} · ${transitionDate} · día simulado ${simulatedDay}.`;
+            cropStageNotification.textContent = message;
+            const eventItem = document.createElement('li');
+            eventItem.textContent = message;
+            cropStageEvents.prepend(eventItem);
+            while (cropStageEvents.children.length > 12) {
+                cropStageEvents.lastElementChild.remove();
             }
         }
 
@@ -3875,6 +3973,8 @@
             cropClockRunning = false;
             cropClockComplete = false;
             activeCropPlan = [];
+            cropCycleId += 1;
+            clearCropStageEvents();
             setCropClockEnabled(false);
             cropClockToggle.textContent = 'Iniciar reloj';
             cropClockDate.textContent = 'Sin simulación activa';
@@ -3892,18 +3992,33 @@
 
         function renderCropPlanAt(timestampMs) {
             const referenceDate = new Date(timestampMs).toISOString().slice(0, 10);
-            cropClockLastRenderDate = referenceDate;
+            let plantLayout;
+            try {
+                plantLayout = getCropLayoutSettings();
+            } catch (error) {
+                setCropPlanMessage(error.message || 'Revisa las medidas de distribución.', true);
+                return false;
+            }
             const planned = activeCropPlan.map((assignment) => {
                 let stage;
                 if (referenceDate < assignment.plantDate) {
+                    const totalDuration = assignment.crop.phenology.reduce(
+                        (total, item) => total + Number(item.durationDays || 0),
+                        0
+                    );
                     stage = {
                         stage: 'Pre-siembra',
                         stageCode: null,
                         daysElapsed: 0,
-                        totalDuration: assignment.crop.phenology.reduce(
-                            (total, item) => total + Number(item.durationDays || 0),
-                            0
-                        ),
+                        totalDuration,
+                        nextStage: assignment.crop.phenology[0]?.name || null,
+                        daysToNextStage: Math.max(0, Math.ceil(
+                            (Date.parse(`${assignment.plantDate}T00:00:00Z`) - timestampMs) / 86400000
+                        )),
+                        daysToHarvest: totalDuration,
+                        estimatedHarvestDate: new Date(
+                            Date.parse(`${assignment.plantDate}T00:00:00Z`) + totalDuration * 86400000
+                        ).toISOString().slice(0, 10),
                         percentage: 0,
                         stageEvidenceStatus: 'pending_verification'
                     };
@@ -3912,10 +4027,31 @@
                 }
                 return {
                     ...assignment,
+                    plantLayout,
                     stage,
                     visualStage: getCropVisualStage(assignment.crop, stage),
                     overallProgress: getOverallPhenologyProgress(assignment.crop, stage)
                 };
+            });
+            cropClockLastRenderDate = referenceDate;
+
+            planned.forEach((assignment) => {
+                const key = `${assignment.bed}:${assignment.crop.slug}`;
+                const previous = cropStageByAssignment.get(key);
+                const currentDay = assignment.stage.stage === 'Pre-siembra'
+                    ? -1
+                    : assignment.stage.daysElapsed;
+                if (previous && currentDay > previous.daysElapsed) {
+                    getCropStageTransitions(
+                        assignment.crop,
+                        previous.daysElapsed,
+                        currentDay
+                    ).forEach((transition) => recordCropStageTransition(assignment, transition));
+                }
+                cropStageByAssignment.set(key, {
+                    daysElapsed: currentDay,
+                    stageCode: assignment.stage.stageCode
+                });
             });
 
             greenhouseModel.userData.setCropPlan(planned.map((assignment) => ({
@@ -3926,13 +4062,15 @@
                 stageName: assignment.stage.stage,
                 stageCode: assignment.stage.stageCode,
                 visualStage: assignment.visualStage,
-                overallProgress: assignment.overallProgress
+                overallProgress: assignment.overallProgress,
+                plantLayout: assignment.plantLayout
             })));
             renderCropDistribution(planned);
             cropClockDate.textContent = `Fecha virtual: ${referenceDate} · día ${Math.max(
                 0,
                 Math.floor((timestampMs - cropClockStartMs) / 86400000)
-            )}`;
+            )} · crecimiento ${cropClockDaysPerSecond} día(s)/s · independiente del escenario`;
+            return true;
         }
 
         function updateCropClock() {
@@ -3940,7 +4078,16 @@
             const timestampMs = currentCropClockMs();
             const referenceDate = new Date(timestampMs).toISOString().slice(0, 10);
             if (referenceDate !== cropClockLastRenderDate || timestampMs >= cropClockEndMs) {
-                renderCropPlanAt(timestampMs);
+                if (!renderCropPlanAt(timestampMs)) {
+                    if (cropClockInterval !== null) {
+                        clearInterval(cropClockInterval);
+                        cropClockInterval = null;
+                    }
+                    cropClockBaseMs = timestampMs;
+                    cropClockRunning = false;
+                    cropClockToggle.textContent = 'Reanudar reloj';
+                    return;
+                }
             }
             if (timestampMs >= cropClockEndMs) {
                 cropClockBaseMs = cropClockEndMs;
@@ -3998,6 +4145,7 @@
             }
 
             try {
+                getCropLayoutSettings();
                 stopCropClock();
                 activeCropPlan = assignments.map((assignment) => ({
                     ...assignment,
@@ -4045,6 +4193,32 @@
             if (event.target === cropDialog) cropDialog.close();
         });
         document.getElementById('cropPlanGenerate').addEventListener('click', generateCropPlan);
+        Object.values(cropLayoutInputs).forEach((input) => {
+            input.addEventListener('change', () => {
+                if (!activeCropPlan.length) {
+                    try {
+                        getCropLayoutSettings();
+                        setCropPlanMessage('Distribución estimada actualizada. Genera la sugerencia para aplicarla a los camellones.');
+                    } catch (error) {
+                        setCropPlanMessage(error.message || 'Revisa las medidas de distribución.', true);
+                    }
+                    return;
+                }
+
+                const currentMs = currentCropClockMs();
+                if (!renderCropPlanAt(currentMs)) {
+                    if (cropClockInterval !== null) {
+                        clearInterval(cropClockInterval);
+                        cropClockInterval = null;
+                    }
+                    cropClockBaseMs = currentMs;
+                    cropClockRunning = false;
+                    cropClockToggle.textContent = 'Reanudar reloj';
+                    return;
+                }
+                setCropPlanMessage('Distribución estimada recalculada; las medidas siguen siendo ilustrativas y configurables.');
+            });
+        });
         cropClockToggle.addEventListener('click', () => {
             if (cropClockRunning) {
                 cropClockBaseMs = currentCropClockMs();
@@ -4064,6 +4238,7 @@
             cropClockBaseMs = currentMs;
             cropClockStartedAtMs = Date.now();
             cropClockDaysPerSecond = Number(cropClockSpeed.value);
+            renderCropPlanAt(currentMs);
             updateCropClock();
         });
         cropClockReset.addEventListener('click', () => {
@@ -4076,6 +4251,7 @@
             cropClockComplete = false;
             cropClockBaseMs = cropClockStartMs;
             cropClockLastRenderDate = '';
+            clearCropStageEvents();
             renderCropPlanAt(cropClockBaseMs);
             startCropClock();
         });
@@ -5005,6 +5181,7 @@
             requestAnimationFrame(animate);
             const rawDt = Math.min(clock.getDelta(), 0.05);
             const elapsed = clock.elapsedTime;
+            greenhouseModel.userData.updateCropAnimation(elapsed);
 
             // FIX: timeScale global. El backend persiste timeScale (1/2/5/10) en Supabase
             // y el frontend lo lee en backendDevices.timeScale. Aquí decidimos cuánto

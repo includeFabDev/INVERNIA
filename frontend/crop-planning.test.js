@@ -2,13 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  calculatePlantLayout,
   createCropDistribution,
   estimateCropStage,
   getAcceleratedTimestamp,
+  getCropStageTransitions,
   getCropVisualStage,
   getLocalCalendarDate,
   getOverallPhenologyProgress
 } from './crop-planning.js';
+import { CROP_DISTRIBUTION_DEFAULTS } from './greenhouse-model.js';
 
 const catalog = [
   { slug: 'tomate', name: 'Tomate', phenology: [{ durationDays: 10 }, { durationDays: 20 }] },
@@ -42,6 +45,55 @@ test('leaves unselected beds empty and rejects more than six distinct crops', ()
 test('rejects duplicate and unknown crop selections instead of silently changing the plan', () => {
   assert.throws(() => createCropDistribution(['tomate', 'tomate'], catalog), TypeError);
   assert.throws(() => createCropDistribution(['unknown'], catalog), RangeError);
+});
+
+test('estimates a bounded bed layout from configurable dimensions and spacing', () => {
+  const layout = calculatePlantLayout({
+    bedLength: 8,
+    bedWidth: 3,
+    plantSpacing: 1.5,
+    rowSpacing: 1,
+    edgeMargin: 0.1
+  });
+  assert.equal(layout.plantCount, layout.rows * layout.columns);
+  assert.ok(layout.plantCount > 0);
+  assert.equal(layout.rows, 2);
+  assert.ok(layout.positions.every(({ x, z }) => Math.abs(x) <= 0.5 && Math.abs(z) <= 3));
+  for (let first = 0; first < layout.positions.length; first += 1) {
+    for (let second = first + 1; second < layout.positions.length; second += 1) {
+      const xDistance = layout.positions[first].x - layout.positions[second].x;
+      const zDistance = layout.positions[first].z - layout.positions[second].z;
+      assert.ok(Math.hypot(xDistance, zDistance) >= 1);
+    }
+  }
+  const denseLayout = calculatePlantLayout({
+    bedLength: 8,
+    bedWidth: 3,
+    plantSpacing: 0.01,
+    rowSpacing: 0.01,
+    edgeMargin: 0.1
+  });
+  assert.ok(denseLayout.plantCount > denseLayout.visualPlantCount);
+  assert.ok(denseLayout.visualPlantCount <= 500);
+  assert.throws(
+    () => calculatePlantLayout({
+      bedLength: 8,
+      bedWidth: 3,
+      plantSpacing: 1,
+      rowSpacing: 1,
+      edgeMargin: 1.5
+    }),
+    RangeError
+  );
+});
+
+test('uses the legacy 3D bed footprint and plant count only as an estimated default', () => {
+  const layout = calculatePlantLayout(CROP_DISTRIBUTION_DEFAULTS);
+
+  assert.equal(layout.bedLength, 28.4);
+  assert.equal(layout.bedWidth, 1.15);
+  assert.equal(layout.plantCount, 18);
+  assert.equal(layout.visualPlantCount, layout.plantCount);
 });
 
 test('calculates overall stage progress using each crop profile duration total', () => {
@@ -83,12 +135,47 @@ test('estimates fruit and leaf stages from each profile duration at a simulated 
       totalDuration: 5,
       stageDurationDays: 3,
       stageStartDay: 2,
+      nextStage: null,
+      daysToNextStage: null,
+      daysToHarvest: 2,
+      estimatedHarvestDate: '2026-10-17',
       percentage: 33.3,
       stageEvidenceStatus: 'pending_verification'
     }
   );
+  assert.equal(estimateCropStage(fruitCrop, '2026-10-12', '2026-10-14').stage, 'Germinación');
+  assert.equal(estimateCropStage(fruitCrop, '2026-10-12', '2026-10-15').stage, 'Floración');
+  assert.equal(estimateCropStage(leafCrop, '2026-10-12', '2026-10-15').stage, 'Emergencia');
+  assert.equal(estimateCropStage(leafCrop, '2026-10-12', '2026-10-15').daysToNextStage, 2);
+  assert.equal(estimateCropStage(leafCrop, '2026-10-12', '2026-10-15').nextStage, 'Hojas');
+  assert.equal(estimateCropStage(leafCrop, '2026-10-12', '2026-10-15').estimatedHarvestDate, '2026-10-22');
   assert.equal(estimateCropStage(leafCrop, '2026-10-12', '2026-10-16').stage, 'Emergencia');
+  assert.equal(estimateCropStage(leafCrop, '2026-10-12', '2026-10-16').daysToNextStage, 1);
+  assert.equal(estimateCropStage(leafCrop, '2026-10-12', '2026-10-17').stage, 'Hojas');
   assert.throws(() => estimateCropStage(fruitCrop, 'invalid', '2026-10-15'), TypeError);
+});
+
+test('reports each configured stage transition once across skipped simulated days', () => {
+  const crop = {
+    phenology: [
+      { code: 'V0', name: 'Emergencia', durationDays: 2 },
+      { code: 'V1', name: 'Plántula', durationDays: 3 },
+      { code: 'R1', name: 'Cosecha', durationDays: 4 }
+    ]
+  };
+
+  assert.deepEqual(getCropStageTransitions(crop, 1, 6), [
+    { stage: 'Plántula', stageCode: 'V1', day: 3 },
+    { stage: 'Cosecha', stageCode: 'R1', day: 6 }
+  ]);
+  assert.deepEqual(getCropStageTransitions(crop, -1, 3), [
+    { stage: 'Emergencia', stageCode: 'V0', day: 0 },
+    { stage: 'Plántula', stageCode: 'V1', day: 3 }
+  ]);
+  assert.deepEqual(getCropStageTransitions(crop, 3, 6), [
+    { stage: 'Cosecha', stageCode: 'R1', day: 6 }
+  ]);
+  assert.throws(() => getCropStageTransitions(crop, 3, 2), TypeError);
 });
 
 test('renders fruiting phenology differently from leafy-crop harvest stages', () => {
