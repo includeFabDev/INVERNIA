@@ -309,29 +309,10 @@
             transition: transform 0.28s ease, opacity 0.28s ease;
         }
 
-        .monitor-panel.drawer-closed,
-        .layer-drawer.drawer-closed {
+        .monitor-panel.drawer-closed {
             opacity: 0;
             transform: translateX(calc(-100% - 18px));
             pointer-events: none;
-        }
-
-        .layer-drawer {
-            position: fixed;
-            top: 68px;
-            left: 20px;
-            z-index: 30;
-            width: min(390px, calc(100vw - 72px));
-            max-height: calc(100vh - 180px);
-            overflow-y: auto;
-            padding: 18px;
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            background: var(--card);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            transition: transform 0.28s ease, opacity 0.28s ease;
-            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
         }
 
         .monitor-panel,
@@ -361,7 +342,6 @@
         .side-drawer-tab span { writing-mode: vertical-rl; }
         .side-drawer-tab-left { left: 0; border-radius: 0 8px 8px 0; }
         .side-drawer-tab-right { right: 0; border-radius: 8px 0 0 8px; }
-        .side-drawer-tab-left-layer { top: 190px; }
         .side-drawer-tab[aria-expanded="true"] { color: #baf4ce; border-color: rgba(46, 204, 113, 0.45); }
         }
 
@@ -1038,7 +1018,6 @@
         body.walk-mode .nav-bar,
         body.walk-mode .side-drawer-tab,
         body.walk-mode .monitor-panel,
-        body.walk-mode .layer-drawer,
         body.walk-mode .info-panel,
         body.walk-mode .explorer-panel,
         body.walk-mode .component-card,
@@ -1380,9 +1359,6 @@
     <button class="side-drawer-tab side-drawer-tab-left" id="dashboardDrawerToggle" type="button" aria-controls="monitorPanel" aria-expanded="false">
         <span>Dashboard</span>
     </button>
-    <button class="side-drawer-tab side-drawer-tab-left side-drawer-tab-left-layer" id="layerDrawerToggle" type="button" aria-controls="layerInfoDrawer" aria-expanded="false">
-        <span>Capas</span>
-    </button>
     <button class="side-drawer-tab side-drawer-tab-right" id="infoDrawerToggle" type="button" aria-controls="infoPanel" aria-expanded="false">
         <span>Información</span>
     </button>
@@ -1394,17 +1370,6 @@
         <h2 id="layerTitle">Titulo</h2>
         <p id="layerDesc">Descripción</p>
         <ul class="elements-list" id="layerElements"></ul>
-    </aside>
-
-    <aside class="layer-drawer drawer-closed" id="layerInfoDrawer" aria-label="Información de capa">
-        <header class="monitor-heading">
-            <h2 id="layerDrawerTitle">CAPA IoT</h2>
-            <button class="iot-device-close" id="layerDrawerClose" type="button" aria-label="Cerrar información de capa" title="Cerrar">×</button>
-        </header>
-        <div class="layer-badge" id="layerDrawerBadge">CAPA 1</div>
-        <h2 id="layerDrawerHeading">Información de capa</h2>
-        <p id="layerDrawerDesc"></p>
-        <ul class="elements-list" id="layerDrawerElements"></ul>
     </aside>
 
     <section class="monitor-panel drawer-closed" id="monitorPanel" aria-label="Monitoreo INVERNIA">
@@ -2979,9 +2944,7 @@
         const explorerClose = document.getElementById('explorerClose');
         const tourStatus = document.getElementById('tourStatus');
         const monitorPanel = document.getElementById('monitorPanel');
-        const layerInfoDrawer = document.getElementById('layerInfoDrawer');
         const dashboardDrawerToggle = document.getElementById('dashboardDrawerToggle');
-        const layerDrawerToggle = document.getElementById('layerDrawerToggle');
         const infoDrawerToggle = document.getElementById('infoDrawerToggle');
         let leftPanelView = null;
         let leftPanelOpen = false;
@@ -3005,33 +2968,18 @@
                 layerElements.appendChild(li);
             });
 
-            document.getElementById('layerDrawerTitle').textContent = data.badge;
-            document.getElementById('layerDrawerBadge').textContent = data.badge;
-            document.getElementById('layerDrawerBadge').style.color = data.badgeColor;
-            document.getElementById('layerDrawerBadge').style.background = data.badgeBg;
-            document.getElementById('layerDrawerBadge').style.border = `1px solid ${data.badgeColor}33`;
-            document.getElementById('layerDrawerHeading').textContent = data.title;
-            document.getElementById('layerDrawerDesc').textContent = data.desc;
-            const drawerElements = document.getElementById('layerDrawerElements');
-            drawerElements.replaceChildren(...[...layerElements.children].map((item) => item.cloneNode(true)));
-            layerBadge.style.color = data.badgeColor;
-            layerBadge.style.background = data.badgeBg;
-            layerBadge.style.border = `1px solid ${data.badgeColor}33`;
         }
 
         function updateDrawerButtons() {
             dashboardDrawerToggle.setAttribute('aria-expanded', String(leftPanelOpen && leftPanelView === 'dashboard'));
-            layerDrawerToggle.setAttribute('aria-expanded', String(leftPanelOpen && leftPanelView === 'layer'));
             infoDrawerToggle.setAttribute('aria-expanded', String(rightPanelOpen));
             monitorPanel.setAttribute('aria-hidden', String(!(leftPanelOpen && leftPanelView === 'dashboard')));
-            layerInfoDrawer.setAttribute('aria-hidden', String(!(leftPanelOpen && leftPanelView === 'layer')));
             infoPanel.setAttribute('aria-hidden', String(!rightPanelOpen));
         }
 
         function closeLeftDrawer() {
             leftPanelOpen = false;
             monitorPanel.classList.add('drawer-closed');
-            layerInfoDrawer.classList.add('drawer-closed');
             updateDrawerButtons();
         }
 
@@ -3041,7 +2989,6 @@
             leftPanelView = view;
             leftPanelOpen = true;
             monitorPanel.classList.toggle('drawer-closed', view !== 'dashboard');
-            layerInfoDrawer.classList.toggle('drawer-closed', view !== 'layer');
             updateDrawerButtons();
         }
 
@@ -3063,16 +3010,11 @@
             if (leftPanelOpen && leftPanelView === 'dashboard') closeLeftDrawer();
             else openLeftDrawer('dashboard');
         });
-        layerDrawerToggle.addEventListener('click', () => {
-            if (leftPanelOpen && leftPanelView === 'layer') closeLeftDrawer();
-            else openLeftDrawer('layer');
-        });
         infoDrawerToggle.addEventListener('click', () => {
             if (rightPanelOpen) closeRightDrawer();
             else openRightDrawer();
         });
         document.getElementById('dashboardDrawerClose').addEventListener('click', closeLeftDrawer);
-        document.getElementById('layerDrawerClose').addEventListener('click', closeLeftDrawer);
         document.getElementById('infoPanelClose').addEventListener('click', closeRightDrawer);
 
         function setActiveButton(layerKey) {
@@ -3316,7 +3258,7 @@
                     || cameraMovedFromLayerView;
                 if (tourStepIndex >= 0) exitGuidedTour(false);
                 if (layer === currentLayer && !tweenActive && !focusedEducationalComponent) {
-                    openLeftDrawer('layer');
+                    openRightDrawer();
                     return;
                 }
                 clearEducationalSelection();
@@ -3324,7 +3266,7 @@
                 setActiveButton(layer);
                 moveCameraTo(layer);
                 showLayerInfo(layer);
-                openLeftDrawer('layer');
+                openRightDrawer();
                 setQuickActionState(null);
             });
         });
@@ -3717,7 +3659,7 @@
             setQuickActionState(null);
             moveCameraTo(layerKey);
             showLayerInfo(layerKey);
-            if (keepDrawer) openLeftDrawer('layer');
+            if (keepDrawer) openRightDrawer();
         }
 
         quickActions.forEach((button) => {
@@ -4291,12 +4233,12 @@
         simModeSelect.style.borderRadius = '8px';
         simModeSelect.style.padding = '8px 10px';
         simModeSelect.innerHTML = `
-          <option value="sim" selected>Simulación local</option>
-          <option value="backend">Backend (Supabase)</option>
+          <option value="sim">Simulación local</option>
+          <option value="backend" selected>Backend (Supabase)</option>
         `;
         simControls.appendChild(simModeSelect);
 
-        simModeSelect.value = 'sim';
+        simModeSelect.value = 'backend';
 
         const simSpeedLabel = document.createElement('span');
         simSpeedLabel.textContent = '×';
