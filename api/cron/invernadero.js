@@ -1,7 +1,7 @@
 import { getSupabaseClient } from '../../backend_vercel/src/services/supabaseClient.js';
 import { ensureDeviceState, getDefaultState, saveDeviceState } from '../../backend_vercel/src/services/deviceStates.js';
 import { averageZoneMeasurements, createZoneMeasurements } from '../../backend_vercel/src/services/zones.js';
-import { evaluateSystemEvents } from '../../backend_vercel/src/services/events.js';
+import { applySystemEventsToState, dispatchSystemEvents } from '../../backend_vercel/src/services/events.js';
 
 const MEASUREMENT_INTERVAL_MS = 60_000;
 const PHYSICAL_ZONE_TTL_MS = 5 * 60_000;
@@ -33,24 +33,8 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-async function persistZoneMeasurements(supabase, state) {
-  if (measurementsTableUnavailable) return;
-
-  const now = Date.now();
-  if (now - (state.__lastMeasurementMs || 0) < MEASUREMENT_INTERVAL_MS) return;
-
-  const createdAt = new Date(now).toISOString();
-  const rows = Object.entries(state.zonas || {}).map(([zone, values]) => ({
-    created_at: createdAt,
-    zone,
-    temperatura_c: values.temperatura_c,
-    humedad_pct: values.humedad_pct,
-    humedad_suelo_pct: values.humedad_suelo_pct,
-    iluminancia_lux: values.iluminancia_lux,
-    co2_ppm: values.co2_ppm,
-    ph: values.ph
-  }));
-
+async function persistZoneMeasurements(supabase, rows, now) {
+  if (measurementsTableUnavailable || rows.length === 0) return;
   const { error } = await supabase.from('measurements').insert(rows);
   if (error) {
     const missingTable = error.code === '42P01' || error.code === 'PGRST205';
@@ -61,14 +45,11 @@ async function persistZoneMeasurements(supabase, state) {
     }
     return;
   }
-
-  state.__lastMeasurementMs = now;
 }
 
-function updateZonesAndAverages(state, previousZones, dtSeconds, timeScale) {
+function updateZonesAndAverages(state, previousZones, dtSeconds, timeScale, now) {
   const alpha = 1 - Math.exp(-Math.min(120, dtSeconds * timeScale) / 30);
   const simulatedZones = createZoneMeasurements(state, previousZones, alpha);
-  const now = Date.now();
   state.zonas = {};
   for (const zone of ['A', 'B', 'C']) {
     const previous = previousZones[zone] || {};
@@ -222,102 +203,99 @@ function applyClimateRules(currentState, actuators, dtSeconds, timeScale) {
 // Cron tick: por simplicidad actualiza todos los device_states (o solo uno si prefieres)
 export default async function handler(req, res) {
   try {
-    // 🔒 ID unificado del proyecto. Ignoramos cualquier chatId dinámico que venga
-    // por query string: el sistema completo (frontend, bot de Telegram y cron)
-    // opera sobre un único registro fijo en Supabase.
     const FIXED_CHAT_ID = '123456789';
-
-    // Si pasan más de 2 minutos entre ticks (cron atascado, app cerrada, etc.),
-    // clampeamos para que un solo tick no salte la simulación 2h adelante.
     const MAX_DT_SEC = 120;
-    // Tick "mínimo" cuando no hay updated_at (registro recién creado):
-    // usamos 5s para que el primer ciclo tenga efecto visible.
     const DEFAULT_DT_SEC = 5;
-
     const supabase = getSupabaseClient();
-
-    // Leemos el registro fijo incluyendo updated_at para calcular el dt real.
-    const { data, error } = await supabase
-      .from('device_states')
-      .select('chat_id, state, last_action, updated_at')
-      .eq('chat_id', FIXED_CHAT_ID)
-      .maybeSingle();
-
-    if (error) throw error;
-
-    let row = data;
-
-    if (!row) {
-      // Si por algún motivo el registro fijo aún no existe, lo creamos al vuelo
-      // con el estado por defecto. Esto evita que el cron devuelva "updated: 0"
-      // y garantiza que la primera ejecución del proyecto ya tenga su fila.
-      const seeded = await ensureDeviceState(supabase, FIXED_CHAT_ID);
-      row = seeded;
-      if (!row) {
-        return res.status(200).json({ ok: true, updated: 0, note: 'No device_states found' });
-      }
-    }
-
-    // Calculamos cuánto tiempo real pasó desde el último write del CRON.
-    // Usamos un campo dedicado (__lastCronMs) guardado DENTRO del state
-    // para que el próximo tick pueda calcular su dt real sin confundirse
-    // con los writes de /api/state (que también actualiza updated_at).
-    let dtSeconds = DEFAULT_DT_SEC;
-    const persistedState = (row && row.state) ? row.state : {};
-    const lastCronMs = typeof persistedState.__lastCronMs === 'number' ? persistedState.__lastCronMs : null;
-    if (lastCronMs !== null && lastCronMs > 0) {
-      dtSeconds = Math.max(0.5, Math.min(MAX_DT_SEC, (Date.now() - lastCronMs) / 1000));
-    }
-
+    const nowMs = Date.now();
+    const row = await ensureDeviceState(supabase, FIXED_CHAT_ID);
     const chatId = row.chat_id;
-    const state = { ...getDefaultState(), ...persistedState };
-    const defaultZones = getDefaultState().zonas;
-    const previousZones = Object.fromEntries(['A', 'B', 'C'].map((zone) => [
-      zone,
-      { ...defaultZones[zone], ...(persistedState.zonas?.[zone] || {}) }
-    ]));
-    state.zonas = createZoneMeasurements(state, previousZones, 1);
+    const saved = await saveDeviceState(
+      supabase,
+      chatId,
+      (persistedState) => {
+        let dtSeconds = DEFAULT_DT_SEC;
+        const lastCronMs = typeof persistedState.__lastCronMs === 'number'
+          ? persistedState.__lastCronMs
+          : null;
+        if (lastCronMs !== null && lastCronMs > 0) {
+          dtSeconds = Math.max(0.5, Math.min(MAX_DT_SEC, (nowMs - lastCronMs) / 1000));
+        }
 
-    // Hora virtual (fuente de verdad = cron)
-    // Retrocompatibilidad:
-    // - si no existe usarHoraReal => true
-    // - si no existe timeScale => 1
-    const usarHoraReal = state.usarHoraReal !== false;
-    const timeScale = typeof state.timeScale === 'number' && !Number.isNaN(state.timeScale) && state.timeScale > 0
-      ? state.timeScale
-      : 1;
+        const state = { ...getDefaultState(), ...persistedState };
+        const defaultZones = getDefaultState().zonas;
+        const previousZones = Object.fromEntries(['A', 'B', 'C'].map((zone) => [
+          zone,
+          { ...defaultZones[zone], ...(persistedState.zonas?.[zone] || {}) }
+        ]));
+        state.zonas = createZoneMeasurements(state, previousZones, 1);
 
-    if (usarHoraReal) {
-      // Hora real (del servidor)
-      const now = new Date();
-      state.horaVirtual = toHHMM(now.getHours(), now.getMinutes());
-    } else {
-      // Avanza horaVirtual proporcional al tiempo real pasado × timeScale.
-      const { hh, mm } = parseHHMM(state.horaVirtual);
-      const totalMinutes = hh * 60 + mm;
-      // "1s real = 1 min simulado" como convención original; timeScale
-      // multiplica cuántos minutos virtuales corren por segundo real.
-      const minutesToAdd = dtSeconds * 1 * timeScale;
-      state.horaVirtual = minutesToHHMM(totalMinutes + minutesToAdd);
-    }
+        const usarHoraReal = state.usarHoraReal !== false;
+        const timeScale = typeof state.timeScale === 'number'
+          && !Number.isNaN(state.timeScale)
+          && state.timeScale > 0
+          ? state.timeScale
+          : 1;
 
-    // actuadores
-    const actuators = {
-      luz: !!state.luz,
-      aire: !!state.aire,
-      riego: !!state.riego
-    };
+        if (usarHoraReal) {
+          const now = new Date(nowMs);
+          state.horaVirtual = toHHMM(now.getHours(), now.getMinutes());
+        } else {
+          const { hh, mm } = parseHHMM(state.horaVirtual);
+          const totalMinutes = hh * 60 + mm;
+          state.horaVirtual = minutesToHHMM(totalMinutes + dtSeconds * timeScale);
+        }
 
-    // El clima sigue evolucionando en manual; solo se omiten umbrales automáticos.
-    const modoAutomatico = state.modoAutomatico !== false;
-    const nextState = applyClimateRules(state, actuators, dtSeconds, timeScale);
-    updateZonesAndAverages(nextState, previousZones, dtSeconds, timeScale);
-    await evaluateSystemEvents(supabase, persistedState, nextState, modoAutomatico ? 'automatic' : 'manual');
-    if (typeof state.horaVirtual === 'string') nextState.horaVirtual = state.horaVirtual;
-    nextState.__lastCronMs = Date.now();
+        const actuators = {
+          luz: !!state.luz,
+          aire: !!state.aire,
+          riego: !!state.riego
+        };
+        const modoAutomatico = state.modoAutomatico !== false;
+        const nextState = applyClimateRules(state, actuators, dtSeconds, timeScale);
+        updateZonesAndAverages(nextState, previousZones, dtSeconds, timeScale, nowMs);
+        const eventPlan = applySystemEventsToState(
+          persistedState,
+          nextState,
+          modoAutomatico ? 'automatic' : 'manual'
+        );
+        if (typeof state.horaVirtual === 'string') nextState.horaVirtual = state.horaVirtual;
+        nextState.__lastCronMs = nowMs;
 
-    await persistZoneMeasurements(supabase, nextState);
-    await saveDeviceState(supabase, chatId, nextState, modoAutomatico ? 'tick_clima' : 'tick_manual');
+        const shouldRecordMeasurements = !measurementsTableUnavailable
+          && nowMs - (persistedState.__lastMeasurementMs || 0) >= MEASUREMENT_INTERVAL_MS;
+        const measurementRows = shouldRecordMeasurements
+          ? Object.entries(nextState.zonas || {}).map(([zone, values]) => ({
+            created_at: new Date(nowMs).toISOString(),
+            zone,
+            temperatura_c: values.temperatura_c,
+            humedad_pct: values.humedad_pct,
+            humedad_suelo_pct: values.humedad_suelo_pct,
+            iluminancia_lux: values.iluminancia_lux,
+            co2_ppm: values.co2_ppm,
+            ph: values.ph
+          }))
+          : [];
+        if (shouldRecordMeasurements) nextState.__lastMeasurementMs = nowMs;
+
+        return {
+          state: nextState,
+          lastAction: modoAutomatico ? 'tick_clima' : 'tick_manual',
+          metadata: {
+            dtSeconds,
+            timeScale,
+            modoAutomatico,
+            effects: eventPlan.effects,
+            measurementRows
+          }
+        };
+      }
+    );
+    const nextState = saved.state;
+    const { dtSeconds, timeScale, modoAutomatico, effects, measurementRows } = saved.metadata;
+
+    await dispatchSystemEvents(supabase, effects);
+    await persistZoneMeasurements(supabase, measurementRows, nowMs);
     return res.status(200).json({
       ok: true,
       updated: 1,
@@ -338,4 +316,3 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Cron tick error' });
   }
 }
-

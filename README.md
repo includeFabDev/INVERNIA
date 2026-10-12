@@ -46,6 +46,19 @@ Sistema IoT tipo **smart home / invernadero** con:
 
 ---
 
+## Módulo agronómico añadido
+
+Se incorporó un módulo extendido bajo `backend_vercel/src/services/cropProfiles.js` y rutas de consulta bajo `/api/crops` y `/api/agronomic/plan`.
+
+Incluye:
+- Catálogo seguro con los siete cultivos autorizados.
+- Diferenciación de hortalizas de fruto y de hoja.
+- Etapas fenológicas y estimaciones de avance por fecha de siembra/trasplante.
+- Compatibilidad, ocupación temporal/espacial y detección de conflicto de riego compartido.
+- Fuentes y estado de validación explícitos para cada cultivo.
+
+Las rutas existentes del sistema IoT y del bot de Telegram no se reemplazan ni destruyen; la integración es aditiva y compatible con el backend actual.
+
 ## Estado en Supabase
 
 Tabla esperada: `device_states`

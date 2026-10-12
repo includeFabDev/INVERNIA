@@ -224,10 +224,12 @@ export function telegramWebhookRoute(supabase) {
           // Botones de velocidad de simulación: persisten timeScale en Supabase
           // para que el cron del clima y el frontend lean el mismo factor.
           const nextScale = Number(callbackData.split('_')[1]);
-          const current = await ensureDeviceState(supabase, dbChatId);
-          const nextState = { ...(current.state || {}) };
-          nextState.timeScale = nextScale;
-          await saveDeviceState(supabase, dbChatId, nextState, 'set_timeScale');
+          await saveDeviceState(
+            supabase,
+            dbChatId,
+            (state) => ({ state: { ...state, timeScale: nextScale } }),
+            'set_timeScale'
+          );
           messageAck = `⏩ Velocidad: x${nextScale}`;
         } else if (callbackData === 'refresh_panel') {
           messageAck = '🔄 Estado actualizado';

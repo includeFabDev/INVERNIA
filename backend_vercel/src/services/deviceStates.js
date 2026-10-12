@@ -1,4 +1,6 @@
 import { createZoneMeasurements } from './zones.js';
+import { applyDeviceStateIntent, StatePersistenceError } from './experimentalDeviceStateWrites.js';
+import { createSupabaseDeviceStateRepository } from './supabaseDeviceStateRepository.js';
 
 const DEFAULT_STATE = {
   luz: false,
@@ -14,14 +16,28 @@ const DEFAULT_STATE = {
   modoSeco: false,
   modoAutomatico: true,
   fuenteDatos: 'simulation',
-
-  // Reloj
-  // Retrocompatibilidad: si no existen estos campos en registros antiguos,
-  // el backend y el cron asumirán usarHoraReal=true y timeScale=1.
   usarHoraReal: true,
   timeScale: 1,
   horaVirtual: '18:45'
 };
+
+const MAX_CREATE_ATTEMPTS = 3;
+
+function casEnabled() {
+  return process.env.DEVICE_STATE_WRITE_MODE === 'cas';
+}
+
+function toDeviceStateRow(snapshot) {
+  const row = {
+    chat_id: snapshot.chatId,
+    state: snapshot.state,
+    last_action: snapshot.lastAction,
+    updated_at: snapshot.updatedAt ?? null,
+    revision: snapshot.revision
+  };
+  if (snapshot.metadata !== undefined) row.metadata = snapshot.metadata;
+  return row;
+}
 
 export function getDefaultState() {
   const state = { ...DEFAULT_STATE };
@@ -30,48 +46,56 @@ export function getDefaultState() {
 }
 
 export async function ensureDeviceState(supabase, chatId) {
-  const { data, error } = await supabase
-    .from('device_states')
-    .select('chat_id, state, last_action, updated_at')
-    .eq('chat_id', chatId)
-    .maybeSingle();
+  const repository = createSupabaseDeviceStateRepository(supabase);
 
-  if (error) throw error;
+  for (let attempt = 1; attempt <= MAX_CREATE_ATTEMPTS; attempt += 1) {
+    try {
+      return toDeviceStateRow(await repository.read(chatId));
+    } catch (error) {
+      if (!(error instanceof StatePersistenceError) || error.code !== 'DEVICE_STATE_NOT_FOUND') {
+        throw error;
+      }
+    }
 
-  if (!data) {
-    const payload = {
-      chat_id: chatId,
-      state: getDefaultState(),
-      last_action: 'init'
-    };
+    if (!casEnabled()) {
+      throw new StatePersistenceError(
+        'Device state creation is disabled; set DEVICE_STATE_WRITE_MODE=cas after CAS is installed'
+      );
+    }
 
-    const { data: inserted } = await supabase
-      .from('device_states')
-      .upsert(payload, { onConflict: 'chat_id' })
-      .select('chat_id, state, last_action, updated_at')
-      .single();
-
-    return inserted;
+    const creation = await repository.createIfAbsent(chatId, getDefaultState(), 'init');
+    if (creation.status === 'created') return toDeviceStateRow(creation.snapshot);
   }
 
-  return data;
+  throw new StatePersistenceError(`Could not create or read device state for chat_id ${chatId}`);
 }
 
-export async function saveDeviceState(supabase, chatId, nextState, lastAction) {
-  const { data, error } = await supabase
-    .from('device_states')
-    .upsert(
-      {
-        chat_id: chatId,
-        state: nextState,
-        last_action: lastAction
-      },
-      { onConflict: 'chat_id' }
-    )
-    .select('chat_id, state, last_action, updated_at')
-    .single();
+export async function saveDeviceState(supabase, chatId, intent, lastAction) {
+  if (!casEnabled()) {
+    throw new StatePersistenceError(
+      'Device state writes are disabled; set DEVICE_STATE_WRITE_MODE=cas after all writers are coordinated'
+    );
+  }
+  if (typeof intent !== 'function') {
+    throw new TypeError('saveDeviceState requires a replayable state intent function');
+  }
 
-  if (error) throw error;
-  return data;
+  await ensureDeviceState(supabase, chatId);
+  const repository = createSupabaseDeviceStateRepository(supabase);
+  const snapshot = await applyDeviceStateIntent(
+    repository,
+    chatId,
+    (state, context) => {
+      const result = intent(state, context);
+      if (!result || typeof result !== 'object' || !result.state || typeof result.state !== 'object') {
+        throw new TypeError('State intent must return an object containing state');
+      }
+      return {
+        state: result.state,
+        lastAction: result.lastAction ?? lastAction,
+        metadata: result.metadata
+      };
+    }
+  );
+  return toDeviceStateRow(snapshot);
 }
-

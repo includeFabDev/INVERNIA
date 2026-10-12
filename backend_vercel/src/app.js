@@ -12,6 +12,7 @@ import { actionRoute } from './routes/action.js';
 import { measurementsRoute } from './routes/measurements.js';
 import { telemetryRoute } from './routes/telemetry.js';
 import { eventsRoute } from './routes/events.js';
+import { cropsRoute, cropStageRoute, agronomicPlanRoute } from './routes/crops.js';
 import cronHandler from '../../api/cron/invernadero.js';
 
 
@@ -43,6 +44,10 @@ export function createApp() {
 
   app.get('/api/measurements', awaitableHandler(measurementsRoute(supabase)));
   app.all('/api/events', awaitableHandler(eventsRoute(supabase)));
+  app.get('/api/crops', awaitableHandler(cropsRoute()));
+  app.get('/api/crops/:slug', awaitableHandler(cropsRoute()));
+  app.get('/api/crops/:slug/stage', awaitableHandler(cropStageRoute()));
+  app.post('/api/agronomic/plan', awaitableHandler(agronomicPlanRoute()));
   app.get('/api/cron/invernadero', awaitableHandler(cronHandler));
   app.post('/api/v1/telemetry', awaitableHandler(telemetryRoute(supabase)));
   app.post('/api/telegram-webhook', awaitableHandler(telegramWebhookRoute(supabase)));

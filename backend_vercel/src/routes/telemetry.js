@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
-import { ensureDeviceState, getDefaultState, saveDeviceState } from '../services/deviceStates.js';
+import { getDefaultState, saveDeviceState } from '../services/deviceStates.js';
 import { averageZoneMeasurements } from '../services/zones.js';
-import { evaluateSystemEvents } from '../services/events.js';
+import { applySystemEventsToState, dispatchSystemEvents } from '../services/events.js';
 import { env } from '../config/env.js';
 
 const DEVICE_STATE_ID = 123456789;
@@ -53,23 +53,29 @@ export function telemetryRoute(supabase) {
     }
 
     try {
-      const current = await ensureDeviceState(supabase, DEVICE_STATE_ID);
-      const previousState = current.state || getDefaultState();
-      const state = { ...getDefaultState(), ...previousState };
       const zone = body.zone;
       const receivedAt = new Date().toISOString();
-      state.zonas = { ...state.zonas };
-      state.zonas[zone] = {
-        ...(state.zonas[zone] || {}),
-        ...sample,
-        device_id: body.device_id.trim(),
-        fuenteDatos: 'physical',
-        updated_at: receivedAt
-      };
-      state.fuenteDatos = 'physical';
-      Object.assign(state, averageZoneMeasurements(state.zonas));
-      await evaluateSystemEvents(supabase, previousState, state, 'telemetry');
-      await saveDeviceState(supabase, DEVICE_STATE_ID, state, 'telemetry_received');
+      const saved = await saveDeviceState(
+        supabase,
+        DEVICE_STATE_ID,
+        (previousState) => {
+          const state = { ...getDefaultState(), ...previousState };
+          state.zonas = { ...(state.zonas || {}) };
+          state.zonas[zone] = {
+            ...(state.zonas[zone] || {}),
+            ...sample,
+            device_id: body.device_id.trim(),
+            fuenteDatos: 'physical',
+            updated_at: receivedAt
+          };
+          state.fuenteDatos = 'physical';
+          Object.assign(state, averageZoneMeasurements(state.zonas));
+          const eventPlan = applySystemEventsToState(previousState, state, 'telemetry');
+          return { state: eventPlan.state, metadata: eventPlan.effects };
+        },
+        'telemetry_received'
+      );
+      await dispatchSystemEvents(supabase, saved.metadata);
 
       const { error: historyError } = await supabase.from('measurements').insert({
         created_at: receivedAt,
@@ -84,8 +90,8 @@ export function telemetryRoute(supabase) {
       if (historyError) console.warn('[telemetry] history snapshot unavailable', historyError.code || 'unknown');
 
       return res.status(202).json({ ok: true, zone, fuenteDatos: 'physical', history_saved: !historyError });
-    } catch {
-      console.error('[telemetry] request could not update state');
+    } catch (error) {
+      console.error('[telemetry] request could not update state', error);
       return res.status(500).json({ error: 'Telemetry could not be stored' });
     }
   };

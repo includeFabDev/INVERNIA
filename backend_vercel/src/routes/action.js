@@ -1,5 +1,4 @@
 import { executeAction, toggleDevice } from '../services/executeAction.js';
-import { ensureDeviceState } from '../services/deviceStates.js';
 import { saveDeviceState } from '../services/deviceStates.js';
 
 
@@ -14,11 +13,14 @@ export function actionRoute(supabase) {
       }
 
       if (device === 'automation' && (mode === 'manual' || mode === 'automatic')) {
-        const current = await ensureDeviceState(supabase, chatId);
-        const nextState = { ...(current.state || {}) };
-        nextState.modoAutomatico = mode === 'automatic';
-        await saveDeviceState(supabase, chatId, nextState, `set_mode_${mode}`);
-        return res.json({ ok: true, modoAutomatico: nextState.modoAutomatico });
+        const modoAutomatico = mode === 'automatic';
+        await saveDeviceState(
+          supabase,
+          chatId,
+          (state) => ({ state: { ...state, modoAutomatico } }),
+          `set_mode_${mode}`
+        );
+        return res.json({ ok: true, modoAutomatico });
       }
 
       // Control explícito del reloj (usarHoraReal / timeScale)
@@ -29,20 +31,24 @@ export function actionRoute(supabase) {
         // timeScale override (x1/x2/x5/x10)
         if (typeof body.timeScale === 'number' && !Number.isNaN(body.timeScale)) {
           const nextTimeScale = Math.max(0, Math.min(1000, body.timeScale));
-          const current = await ensureDeviceState(supabase, chatId);
-          const nextState = { ...(current.state || {}) };
-          nextState.timeScale = nextTimeScale;
-          await saveDeviceState(supabase, chatId, nextState, 'set_timeScale');
+          await saveDeviceState(
+            supabase,
+            chatId,
+            (state) => ({ state: { ...state, timeScale: nextTimeScale } }),
+            'set_timeScale'
+          );
           return res.json({ ok: true });
         }
 
         // backend/sim
         if (mode === 'backend' || mode === 'sim') {
           const usarHoraReal = mode === 'backend';
-          const current = await ensureDeviceState(supabase, chatId);
-          const nextState = { ...(current.state || {}) };
-          nextState.usarHoraReal = usarHoraReal;
-          await saveDeviceState(supabase, chatId, nextState, 'set_usarHoraReal');
+          await saveDeviceState(
+            supabase,
+            chatId,
+            (state) => ({ state: { ...state, usarHoraReal } }),
+            'set_usarHoraReal'
+          );
           return res.json({ ok: true });
         }
       }
@@ -82,4 +88,3 @@ export function actionRoute(supabase) {
     }
   };
 }
-
