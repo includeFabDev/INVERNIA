@@ -2,6 +2,10 @@
   "rewrites": [
     { "source": "/api/state/:chatId", "destination": "/api" },
     { "source": "/api/events", "destination": "/api" },
+    { "source": "/api/crops/:slug/stage", "destination": "/api" },
+    { "source": "/api/crops/:slug", "destination": "/api" },
+    { "source": "/api/crops", "destination": "/api" },
+    { "source": "/api/agronomic/plan", "destination": "/api" },
     { "source": "/api/action", "destination": "/api" },
     { "source": "/api/telegram-webhook", "destination": "/api" },
     { "source": "/", "destination": "/frontend/index.html" }
