@@ -974,6 +974,9 @@
         .crop-plant-date input { width: 100%; padding: 7px 9px; border: 1px solid rgba(255,255,255,0.14); border-radius: 7px; background: rgba(0,0,0,0.28); color: var(--fg); font: 11px 'Space Grotesk', sans-serif; }
         .crop-plant-date input:disabled { opacity: 0.45; }
         .crop-plan-controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+        .crop-clock-speed { display: flex; align-items: center; gap: 7px; color: #c5d5c8; font-size: 11px; }
+        .crop-clock-speed select { padding: 7px 9px; border: 1px solid rgba(255,255,255,0.14); border-radius: 7px; background: #172119; color: var(--fg); font: 11px 'Space Grotesk', sans-serif; }
+        .crop-clock-date { align-self: center; color: #b8efca; font-size: 11px; font-variant-numeric: tabular-nums; }
         .crop-plan-status { min-height: 18px; color: #c5d5c8; font-size: 11px; line-height: 1.5; }
         .crop-plan-status[data-error="true"] { color: #ffb4a8; }
         .crop-map-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
@@ -1286,10 +1289,21 @@
             </section>
             <section aria-labelledby="cropMapHeading">
                 <h3 class="crop-section-title" id="cropMapHeading">SELECCIONA QUÉ QUIERES SEMBRAR · MÁXIMO 6 CULTIVOS</h3>
-                <p class="crop-map-note">La fecha de siembra se captura por cultivo. Las fases fenológicas propias de cada perfil determinan la representación 3D. Mientras el reloj virtual no esté conectado, se compara con la fecha actual del sistema y se identifica como simulación provisional.</p>
+                <p class="crop-map-note">La fecha de siembra se captura por cultivo. El reloj acelerado de esta vista inicia en la siembra más temprana y avanza días virtuales; no modifica el reloj de escenarios ni el estado del invernadero. Las etapas y duraciones son preliminares.</p>
                 <div class="crop-plan-controls">
                     <button class="quick-action" id="cropPlanGenerate" type="button">Generar sugerencia y visualizar</button>
                     <button class="quick-action" id="cropPlanClear" type="button">Limpiar visualización</button>
+                    <label class="crop-clock-speed" for="cropClockSpeed">
+                        Velocidad
+                        <select id="cropClockSpeed" disabled>
+                            <option value="1">1 día/segundo</option>
+                            <option value="3">3 días/segundo</option>
+                            <option value="7">7 días/segundo</option>
+                        </select>
+                    </label>
+                    <button class="quick-action" id="cropClockToggle" type="button" disabled>Iniciar reloj</button>
+                    <button class="quick-action" id="cropClockReset" type="button" disabled>Volver al día 0</button>
+                    <output class="crop-clock-date" id="cropClockDate" aria-live="off">Sin simulación activa</output>
                 </div>
                 <div class="crop-plan-status" id="cropPlanStatus" role="status" aria-live="polite">Selecciona uno o más cultivos y define sus fechas de siembra.</div>
                 <h3 class="crop-section-title">DISTRIBUCIÓN PROPUESTA · CADA FILA RECORRE A/B/C</h3>
@@ -1557,8 +1571,9 @@
         import { createGreenhouseModel } from '/frontend/greenhouse-model.js';
         import {
             createCropDistribution,
+            estimateCropStage,
+            getAcceleratedTimestamp,
             getCropVisualStage,
-            getLocalCalendarDate,
             getOverallPhenologyProgress
         } from '/frontend/crop-planning.js';
 
@@ -3695,7 +3710,21 @@
         });
 
         const selectedCropSlugs = [];
-        let cropPlanRequestId = 0;
+        let activeCropPlan = [];
+        let cropClockInterval = null;
+        let cropClockStartedAtMs = 0;
+        let cropClockBaseMs = 0;
+        let cropClockStartMs = 0;
+        let cropClockEndMs = 0;
+        let cropClockDaysPerSecond = 1;
+        let cropClockRunning = false;
+        let cropClockComplete = false;
+        let cropClockLastRenderDate = '';
+        const cropClockSpeed = document.getElementById('cropClockSpeed');
+        const cropClockToggle = document.getElementById('cropClockToggle');
+        const cropClockReset = document.getElementById('cropClockReset');
+        const cropClockDate = document.getElementById('cropClockDate');
+        const cropPlanGenerate = document.getElementById('cropPlanGenerate');
 
         function addCropText(parent, tagName, text, className) {
             const element = document.createElement(tagName);
@@ -3792,8 +3821,7 @@
                 card.appendChild(dateLabel);
 
                 checkbox.addEventListener('change', () => {
-                    cropPlanRequestId += 1;
-                    document.getElementById('cropPlanGenerate').disabled = false;
+                    cropPlanGenerate.disabled = false;
                     const selectedIndex = selectedCropSlugs.indexOf(crop.slug);
                     if (checkbox.checked && selectedIndex === -1) selectedCropSlugs.push(crop.slug);
                     if (!checkbox.checked && selectedIndex !== -1) selectedCropSlugs.splice(selectedIndex, 1);
@@ -3833,15 +3861,120 @@
             cropPlanStatus.dataset.error = String(isError);
         }
 
+        function setCropClockEnabled(enabled) {
+            cropClockSpeed.disabled = !enabled;
+            cropClockToggle.disabled = !enabled || cropClockComplete;
+            cropClockReset.disabled = !enabled;
+        }
+
+        function stopCropClock() {
+            if (cropClockInterval !== null) {
+                clearInterval(cropClockInterval);
+                cropClockInterval = null;
+            }
+            cropClockRunning = false;
+            cropClockComplete = false;
+            activeCropPlan = [];
+            setCropClockEnabled(false);
+            cropClockToggle.textContent = 'Iniciar reloj';
+            cropClockDate.textContent = 'Sin simulación activa';
+        }
+
+        function currentCropClockMs(now = Date.now()) {
+            if (!cropClockRunning) return cropClockBaseMs;
+            return getAcceleratedTimestamp(
+                cropClockBaseMs,
+                now - cropClockStartedAtMs,
+                cropClockDaysPerSecond,
+                cropClockEndMs,
+            );
+        }
+
+        function renderCropPlanAt(timestampMs) {
+            const referenceDate = new Date(timestampMs).toISOString().slice(0, 10);
+            cropClockLastRenderDate = referenceDate;
+            const planned = activeCropPlan.map((assignment) => {
+                let stage;
+                if (referenceDate < assignment.plantDate) {
+                    stage = {
+                        stage: 'Pre-siembra',
+                        stageCode: null,
+                        daysElapsed: 0,
+                        totalDuration: assignment.crop.phenology.reduce(
+                            (total, item) => total + Number(item.durationDays || 0),
+                            0
+                        ),
+                        percentage: 0,
+                        stageEvidenceStatus: 'pending_verification'
+                    };
+                } else {
+                    stage = estimateCropStage(assignment.crop, assignment.plantDate, referenceDate);
+                }
+                return {
+                    ...assignment,
+                    stage,
+                    visualStage: getCropVisualStage(assignment.crop, stage),
+                    overallProgress: getOverallPhenologyProgress(assignment.crop, stage)
+                };
+            });
+
+            greenhouseModel.userData.setCropPlan(planned.map((assignment) => ({
+                bed: assignment.bed,
+                slug: assignment.crop.slug,
+                name: assignment.crop.name,
+                category: assignment.crop.category,
+                stageName: assignment.stage.stage,
+                stageCode: assignment.stage.stageCode,
+                visualStage: assignment.visualStage,
+                overallProgress: assignment.overallProgress
+            })));
+            renderCropDistribution(planned);
+            cropClockDate.textContent = `Fecha virtual: ${referenceDate} · día ${Math.max(
+                0,
+                Math.floor((timestampMs - cropClockStartMs) / 86400000)
+            )}`;
+        }
+
+        function updateCropClock() {
+            if (!activeCropPlan.length) return;
+            const timestampMs = currentCropClockMs();
+            const referenceDate = new Date(timestampMs).toISOString().slice(0, 10);
+            if (referenceDate !== cropClockLastRenderDate || timestampMs >= cropClockEndMs) {
+                renderCropPlanAt(timestampMs);
+            }
+            if (timestampMs >= cropClockEndMs) {
+                cropClockBaseMs = cropClockEndMs;
+                cropClockComplete = true;
+                if (cropClockInterval !== null) {
+                    clearInterval(cropClockInterval);
+                    cropClockInterval = null;
+                }
+                cropClockRunning = false;
+                cropClockToggle.textContent = 'Simulación completa';
+                setCropClockEnabled(true);
+            }
+        }
+
+        function startCropClock() {
+            if (!activeCropPlan.length || cropClockComplete) return;
+            cropClockStartedAtMs = Date.now();
+            cropClockRunning = true;
+            cropClockToggle.textContent = 'Pausar reloj';
+            setCropClockEnabled(true);
+            updateCropClock();
+            if (!cropClockRunning || cropClockComplete) return;
+            cropClockInterval = setInterval(updateCropClock, 250);
+        }
+
         function invalidateCropPlan(message) {
-            cropPlanRequestId += 1;
-            document.getElementById('cropPlanGenerate').disabled = false;
+            cropPlanGenerate.disabled = false;
+            stopCropClock();
             greenhouseModel.userData.setCropPlan([]);
             renderCropDistribution([]);
             setCropPlanMessage(message);
         }
 
-        async function generateCropPlan() {
+        function generateCropPlan() {
             if (!cropCatalogCache) {
                 setCropPlanMessage('Espera a que se cargue el catálogo de cultivos.', true);
                 return;
@@ -3864,76 +3997,37 @@
                 }
             }
 
-            const requestId = ++cropPlanRequestId;
-            const referenceDate = getLocalCalendarDate();
-            setCropPlanMessage(`Calculando fases fenológicas con fecha de referencia ${referenceDate} (reloj del sistema; simulación provisional)…`);
-            document.getElementById('cropPlanGenerate').disabled = true;
-
             try {
-                const planned = await Promise.all(assignments.map(async (assignment) => {
-                    if (assignment.plantDate > referenceDate) {
-                        return {
-                            ...assignment,
-                            stage: {
-                                stage: 'Pre-siembra',
-                                stageCode: null,
-                                daysElapsed: 0,
-                                totalDuration: assignment.crop.phenology.reduce(
-                                    (total, stage) => total + stage.durationDays,
-                                    0
-                                ),
-                                percentage: 0,
-                                stageEvidenceStatus: 'pending_verification'
-                            },
-                            overallProgress: 0
-                        };
-                    }
-
-                    const query = new URLSearchParams({
-                        plantDate: assignment.plantDate,
-                        referenceDate
-                    });
-                    const response = await fetch(
-                        `/api/crops/${encodeURIComponent(assignment.crop.slug)}/stage?${query}`,
-                        { cache: 'no-store' }
-                    );
-                    if (!response.ok) {
-                        throw new Error(`No se pudo calcular la fase de ${assignment.crop.name} (HTTP ${response.status})`);
-                    }
-                    const payload = await response.json();
-                    if (!payload.stage || typeof payload.stage.stage !== 'string') {
-                        throw new Error(`Respuesta fenológica inválida para ${assignment.crop.name}`);
-                    }
-                    return {
-                        ...assignment,
-                        stage: payload.stage,
-                        visualStage: getCropVisualStage(assignment.crop, payload.stage),
-                        overallProgress: getOverallPhenologyProgress(assignment.crop, payload.stage)
-                    };
+                stopCropClock();
+                activeCropPlan = assignments.map((assignment) => ({
+                    ...assignment,
+                    plantDate: selectedInputs.get(assignment.crop.slug)
                 }));
-
-                if (requestId !== cropPlanRequestId) return;
-                greenhouseModel.userData.setCropPlan(planned.map((assignment) => ({
-                    bed: assignment.bed,
-                    slug: assignment.crop.slug,
-                    name: assignment.crop.name,
-                    category: assignment.crop.category,
-                    stageName: assignment.stage.stage,
-                    stageCode: assignment.stage.stageCode,
-                    visualStage: assignment.visualStage,
-                    overallProgress: assignment.overallProgress
-                })));
-                renderCropDistribution(planned);
-                setCropPlanMessage(
-                    `Vista aplicada a ${planned.length} camellón(es). Referencia ${referenceDate} del sistema; etapas y duraciones preliminares.`
+                const firstPlantingMs = Math.min(
+                    ...activeCropPlan.map(({ plantDate }) => Date.parse(`${plantDate}T00:00:00Z`))
                 );
+                cropClockEndMs = Math.max(...activeCropPlan.map(({ crop, plantDate }) => {
+                    const durationDays = crop.phenology.reduce(
+                        (total, stage) => total + Number(stage.durationDays || 0),
+                        0
+                    );
+                    return Date.parse(`${plantDate}T00:00:00Z`) + durationDays * 86400000;
+                }));
+                cropClockBaseMs = firstPlantingMs;
+                cropClockStartMs = firstPlantingMs;
+                cropClockDaysPerSecond = Number(cropClockSpeed.value);
+                cropClockComplete = false;
+                cropClockLastRenderDate = '';
+                setCropClockEnabled(true);
+                renderCropPlanAt(cropClockBaseMs);
+                setCropPlanMessage(
+                    `Reloj fenológico iniciado desde la primera siembra. Avanza ${cropClockDaysPerSecond} día(s) virtual(es) por segundo; datos preliminares.`
+                );
+                startCropClock();
             } catch (error) {
                 console.error('[crop planning] No se pudo generar la distribución', error);
+                invalidateCropPlan('No se pudo iniciar el reloj fenológico.');
                 setCropPlanMessage(error.message || 'No se pudo calcular la sugerencia.', true);
-            } finally {
-                if (requestId === cropPlanRequestId) {
-                    document.getElementById('cropPlanGenerate').disabled = false;
-                }
             }
         }
 
@@ -3951,12 +4045,42 @@
             if (event.target === cropDialog) cropDialog.close();
         });
         document.getElementById('cropPlanGenerate').addEventListener('click', generateCropPlan);
+        cropClockToggle.addEventListener('click', () => {
+            if (cropClockRunning) {
+                cropClockBaseMs = currentCropClockMs();
+                if (cropClockInterval !== null) {
+                    clearInterval(cropClockInterval);
+                    cropClockInterval = null;
+                }
+                cropClockRunning = false;
+                renderCropPlanAt(cropClockBaseMs);
+                cropClockToggle.textContent = 'Reanudar reloj';
+            } else {
+                startCropClock();
+            }
+        });
+        cropClockSpeed.addEventListener('change', () => {
+            const currentMs = currentCropClockMs();
+            cropClockBaseMs = currentMs;
+            cropClockStartedAtMs = Date.now();
+            cropClockDaysPerSecond = Number(cropClockSpeed.value);
+            updateCropClock();
+        });
+        cropClockReset.addEventListener('click', () => {
+            if (!activeCropPlan.length) return;
+            if (cropClockInterval !== null) {
+                clearInterval(cropClockInterval);
+                cropClockInterval = null;
+            }
+            cropClockRunning = false;
+            cropClockComplete = false;
+            cropClockBaseMs = cropClockStartMs;
+            cropClockLastRenderDate = '';
+            renderCropPlanAt(cropClockBaseMs);
+            startCropClock();
+        });
         document.getElementById('cropPlanClear').addEventListener('click', () => {
-            cropPlanRequestId += 1;
-            greenhouseModel.userData.setCropPlan([]);
-            renderCropDistribution([]);
-            setCropPlanMessage('Visualización limpiada. Las selecciones y fechas no se guardan.');
-            document.getElementById('cropPlanGenerate').disabled = false;
+            invalidateCropPlan('Visualización y reloj limpiados. Las selecciones y fechas no se guardan.');
         });
 
         // ==============================

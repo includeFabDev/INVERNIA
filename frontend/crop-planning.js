@@ -1,5 +1,16 @@
 const BED_COUNT = 6;
 const ZONES = ['A', 'B', 'C'];
+const MILLISECONDS_PER_DAY = 86400000;
+
+export function getAcceleratedTimestamp(baseMs, elapsedRealMs, daysPerSecond, endMs) {
+  if (![baseMs, elapsedRealMs, daysPerSecond, endMs].every(Number.isFinite)
+    || elapsedRealMs < 0
+    || daysPerSecond <= 0
+    || endMs < baseMs) {
+    throw new TypeError('Valid clock values are required');
+  }
+  return Math.min(endMs, baseMs + elapsedRealMs * daysPerSecond * 86400);
+}
 
 export function createCropDistribution(selectedSlugs, catalog) {
   if (!Array.isArray(selectedSlugs) || !Array.isArray(catalog)) {
@@ -33,6 +44,43 @@ export function getOverallPhenologyProgress(crop, stageResult) {
   if (!totalDuration) return 0;
   const elapsed = Math.max(0, Number(stageResult.daysElapsed) || 0);
   return Math.max(0, Math.min(1, elapsed / totalDuration));
+}
+
+export function estimateCropStage(crop, plantDate, referenceDate) {
+  if (!crop || !Array.isArray(crop.phenology) || crop.phenology.length === 0) {
+    throw new TypeError('A crop with phenology stages is required');
+  }
+  const plantTime = Date.parse(`${plantDate}T00:00:00Z`);
+  const referenceTime = Date.parse(`${referenceDate}T00:00:00Z`);
+  if (!Number.isFinite(plantTime) || !Number.isFinite(referenceTime)) {
+    throw new TypeError('Valid planting and reference dates are required');
+  }
+
+  const daysElapsed = Math.max(0, Math.round((referenceTime - plantTime) / MILLISECONDS_PER_DAY));
+  const totalDuration = crop.phenology.reduce(
+    (total, stage) => total + (Number(stage.durationDays) || 0),
+    0
+  );
+  let cumulativeDays = 0;
+  let currentStage = crop.phenology[0];
+  for (const stage of crop.phenology) {
+    currentStage = stage;
+    if (daysElapsed <= cumulativeDays + stage.durationDays) break;
+    cumulativeDays += stage.durationDays;
+  }
+
+  const stageDurationDays = Number(currentStage.durationDays) || 1;
+  const stageElapsed = Math.max(0, daysElapsed - cumulativeDays);
+  return {
+    stage: currentStage.name,
+    stageCode: currentStage.code,
+    daysElapsed,
+    totalDuration,
+    stageDurationDays,
+    stageStartDay: cumulativeDays,
+    percentage: Number(Math.min(100, (stageElapsed / stageDurationDays) * 100).toFixed(1)),
+    stageEvidenceStatus: currentStage.durationEvidenceStatus || 'pending_verification'
+  };
 }
 
 export function getCropVisualStage(crop, stageResult) {
