@@ -968,12 +968,20 @@
         .crop-card .crop-meta { margin-top: 9px; color: #d1ddd3; font-size: 11px; line-height: 1.5; }
         .crop-card .crop-stages { margin-top: 8px; color: var(--muted); font-size: 10px; line-height: 1.55; }
         .crop-card .crop-validation { margin-top: 9px; color: #f0cf91; font-size: 10px; line-height: 1.45; }
+        .crop-select { display: flex; align-items: center; gap: 8px; margin-top: 12px; color: #d8e5da; font-size: 11px; cursor: pointer; }
+        .crop-select input { accent-color: #39b66a; width: 16px; height: 16px; }
+        .crop-plant-date { display: grid; gap: 5px; margin-top: 8px; color: #aab9ad; font-size: 10px; }
+        .crop-plant-date input { width: 100%; padding: 7px 9px; border: 1px solid rgba(255,255,255,0.14); border-radius: 7px; background: rgba(0,0,0,0.28); color: var(--fg); font: 11px 'Space Grotesk', sans-serif; }
+        .crop-plant-date input:disabled { opacity: 0.45; }
+        .crop-plan-controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+        .crop-plan-status { min-height: 18px; color: #c5d5c8; font-size: 11px; line-height: 1.5; }
+        .crop-plan-status[data-error="true"] { color: #ffb4a8; }
         .crop-map-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
         .crop-map { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 11px; text-align: left; }
         .crop-map th, .crop-map td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
         .crop-map th { background: rgba(46,204,113,0.08); color: #b8efca; }
         .crop-map td { color: #dce5dd; }
-        .crop-map tr:last-child td { border-bottom: 0; }
+        .crop-map tr:last-child td, .crop-map tr:last-child th { border-bottom: 0; }
         .crop-map-note { margin-top: 10px; color: var(--muted); font-size: 11px; line-height: 1.55; }
 
         @media (max-width: 600px) {
@@ -1267,9 +1275,9 @@
                 <button class="crop-close" id="cropDialogClose" type="button" aria-label="Cerrar perfiles de cultivo">×</button>
             </header>
             <div class="crop-callout">
-                <strong>Importante:</strong> las etapas, duraciones, necesidades hídricas y compatibilidades siguen pendientes de validación agronómica.
-                La distribución inferior es solo una propuesta preliminar basada en metadatos heredados. Los seis camellones atraviesan las zonas A, B y C;
-                las tres zonas no son grupos de camellones y todo el invernadero conserva un único sector de riego.
+                La distribución es una sugerencia visual preliminar, no una optimización agronómica. Cada cultivo seleccionado ocupa un camellón completo;
+                los camellones C1–C6 atraviesan las zonas A/B/C. La instalación conserva un solo sector de riego compartido. Las duraciones y necesidades
+                hídricas del catálogo son preliminares y requieren validación.
             </div>
             <div class="crop-status" id="cropCatalogStatus" role="status" aria-live="polite">Cargando perfiles…</div>
             <section aria-labelledby="cropProfilesHeading">
@@ -1277,23 +1285,28 @@
                 <div class="crop-grid" id="cropProfileCards"></div>
             </section>
             <section aria-labelledby="cropMapHeading">
-                <h3 class="crop-section-title" id="cropMapHeading">PROPUESTA PARA REVISIÓN · C1–C6</h3>
+                <h3 class="crop-section-title" id="cropMapHeading">SELECCIONA QUÉ QUIERES SEMBRAR · MÁXIMO 6 CULTIVOS</h3>
+                <p class="crop-map-note">La fecha de siembra se captura por cultivo. Las fases fenológicas propias de cada perfil determinan la representación 3D. Mientras el reloj virtual no esté conectado, se compara con la fecha actual del sistema y se identifica como simulación provisional.</p>
+                <div class="crop-plan-controls">
+                    <button class="quick-action" id="cropPlanGenerate" type="button">Generar sugerencia y visualizar</button>
+                    <button class="quick-action" id="cropPlanClear" type="button">Limpiar visualización</button>
+                </div>
+                <div class="crop-plan-status" id="cropPlanStatus" role="status" aria-live="polite">Selecciona uno o más cultivos y define sus fechas de siembra.</div>
+                <h3 class="crop-section-title">DISTRIBUCIÓN PROPUESTA · CADA FILA RECORRE A/B/C</h3>
                 <div class="crop-map-wrap">
                     <table class="crop-map">
-                        <thead>
-                            <tr><th>Camellón longitudinal</th><th>Zona A</th><th>Zona B</th><th>Zona C</th></tr>
-                        </thead>
-                        <tbody id="cropDistributionRows"></tbody>
+                        <thead><tr><th>Camellón</th><th>Zona A</th><th>Zona B</th><th>Zona C</th></tr></thead>
+                        <tbody id="cropDistributionRows"><tr><td colspan="4">Aún no se generó una propuesta.</td></tr></tbody>
                     </table>
                 </div>
                 <p class="crop-map-note">
-                    Propuesta: C1 tomate + lechuga (asociación marcada como compatible en el catálogo preliminar); C2 pimentón; C3 locoto;
-                    C4 pepino; C5 acelga; C6 espinaca. Cada cultivo en una fila recorre A/B/C. No se asignan superficies ni válvulas individuales.
-                    Antes de aprobarla hay que revisar competencia por luz/espacio, necesidades de agua y el riego común.
+                    Se asignan en orden de selección a C1, C2…; los camellones restantes quedan vacíos. El orden no implica prioridad ni optimalidad.
+                    Esta visualización es temporal y no guarda siembras ni modifica el estado del invernadero.
                 </p>
             </section>
             <div class="crop-callout">
-                El gemelo digital sí anima otros elementos (por ejemplo, el ventilador y la cámara), pero actualmente no dibuja plantas ni animación de crecimiento.
+                Las formas vegetales son educativas/estilizadas. Tomate, pimentón, locoto y pepino muestran etapas de fruto cuando su perfil lo indica;
+                lechuga, acelga y espinaca muestran desarrollo y cosecha foliar. No se predicen rendimientos ni fechas de cosecha garantizadas.
             </div>
         </div>
     </dialog>
@@ -1542,6 +1555,12 @@
         import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
         import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
         import { createGreenhouseModel } from '/frontend/greenhouse-model.js';
+        import {
+            createCropDistribution,
+            getCropVisualStage,
+            getLocalCalendarDate,
+            getOverallPhenologyProgress
+        } from '/frontend/crop-planning.js';
 
         /* ==============================
            DATOS DE CADA CAPA
@@ -3675,14 +3694,8 @@
             });
         });
 
-        const proposedBedAssignments = [
-            { bed: 'C1', crops: ['tomate', 'lechuga'] },
-            { bed: 'C2', crops: ['pimenton'] },
-            { bed: 'C3', crops: ['locoto'] },
-            { bed: 'C4', crops: ['pepino'] },
-            { bed: 'C5', crops: ['acelga'] },
-            { bed: 'C6', crops: ['espinaca'] }
-        ];
+        const selectedCropSlugs = [];
+        let cropPlanRequestId = 0;
 
         function addCropText(parent, tagName, text, className) {
             const element = document.createElement(tagName);
@@ -3692,21 +3705,39 @@
             return element;
         }
 
-        function renderCropDistribution(crops) {
-            const cropNames = new Map(crops.map((crop) => [crop.slug, crop.name]));
+        function renderCropDistribution(plan) {
+            const assignmentsByBed = new Map(plan.map((assignment) => [assignment.bed, assignment]));
             cropDistributionRows.replaceChildren();
-            for (const assignment of proposedBedAssignments) {
+            for (let index = 1; index <= 6; index += 1) {
+                const bed = `C${index}`;
+                const assignment = assignmentsByBed.get(bed);
                 const row = document.createElement('tr');
-                addCropText(row, 'th', `CAMELLÓN ${assignment.bed}`, '');
-                const assignmentLabel = assignment.crops
-                    .map((slug) => cropNames.get(slug))
-                    .filter(Boolean)
-                    .join(' + ');
-                for (const _zone of ['A', 'B', 'C']) {
-                    addCropText(row, 'td', assignmentLabel || 'Sin asignación disponible', '');
+                addCropText(row, 'th', `CAMELLÓN ${bed}`, '');
+                const stage = assignment
+                    ? `${assignment.stage.stage}${assignment.stage.stageCode ? ` (${assignment.stage.stageCode})` : ''} · día ${assignment.stage.daysElapsed}`
+                    : 'Vacío';
+                for (const zone of ['A', 'B', 'C']) {
+                    const content = assignment
+                        ? `${assignment.crop.name} · ${stage} · siembra ${assignment.plantDate}`
+                        : 'Sin cultivo';
+                    addCropText(row, 'td', content, '');
                 }
                 cropDistributionRows.appendChild(row);
             }
+        }
+
+        function syncCropSelectionControls() {
+            cropProfileCards.querySelectorAll('[data-crop-select]').forEach((checkbox) => {
+                checkbox.checked = selectedCropSlugs.includes(checkbox.value);
+                checkbox.disabled = !checkbox.checked && selectedCropSlugs.length >= 6;
+                const dateInput = checkbox.closest('.crop-card')?.querySelector('[data-crop-plant-date]');
+                if (dateInput) dateInput.disabled = !checkbox.checked;
+            });
+            const count = selectedCropSlugs.length;
+            cropPlanStatus.dataset.error = 'false';
+            cropPlanStatus.textContent = count
+                ? `${count} de 6 camellones seleccionados. La asignación seguirá el orden de selección; pulsa “Generar sugerencia y visualizar” para aplicar.`
+                : 'Selecciona uno o más cultivos y define sus fechas de siembra.';
         }
 
         function renderCropProfiles(crops) {
@@ -3714,6 +3745,7 @@
             for (const crop of crops) {
                 const card = document.createElement('article');
                 card.className = 'crop-card';
+                card.dataset.cropSlug = crop.slug;
                 addCropText(card, 'h4', crop.name);
                 addCropText(card, 'div', crop.scientificName, 'crop-scientific');
                 addCropText(
@@ -3738,16 +3770,46 @@
                     `${crop.validationStatus === 'preliminary' ? 'PRELIMINAR' : crop.validationStatus || 'VALIDACIÓN PENDIENTE'} · ${crop.validationNotes || 'Requiere revisión.'}`,
                     'crop-validation'
                 );
+                const selectionLabel = document.createElement('label');
+                selectionLabel.className = 'crop-select';
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.value = crop.slug;
+                checkbox.dataset.cropSelect = 'true';
+                const selectionText = document.createElement('span');
+                selectionText.textContent = 'Incluir en la sugerencia';
+                selectionLabel.append(checkbox, selectionText);
+                card.appendChild(selectionLabel);
+
+                const dateLabel = document.createElement('label');
+                dateLabel.className = 'crop-plant-date';
+                dateLabel.textContent = 'Fecha de siembra';
+                const dateInput = document.createElement('input');
+                dateInput.type = 'date';
+                dateInput.dataset.cropPlantDate = 'true';
+                dateInput.disabled = true;
+                dateLabel.appendChild(dateInput);
+                card.appendChild(dateLabel);
+
+                checkbox.addEventListener('change', () => {
+                    cropPlanRequestId += 1;
+                    document.getElementById('cropPlanGenerate').disabled = false;
+                    const selectedIndex = selectedCropSlugs.indexOf(crop.slug);
+                    if (checkbox.checked && selectedIndex === -1) selectedCropSlugs.push(crop.slug);
+                    if (!checkbox.checked && selectedIndex !== -1) selectedCropSlugs.splice(selectedIndex, 1);
+                    syncCropSelectionControls();
+                    invalidateCropPlan('Selección modificada; genera una nueva sugerencia para visualizarla.');
+                });
+                dateInput.addEventListener('change', () => {
+                    invalidateCropPlan('Fecha modificada; vuelve a generar la sugerencia para actualizar las fases.');
+                });
                 cropProfileCards.appendChild(card);
             }
+            syncCropSelectionControls();
         }
 
         async function loadCropCatalog() {
-            if (cropCatalogCache) {
-                renderCropProfiles(cropCatalogCache);
-                renderCropDistribution(cropCatalogCache);
-                return;
-            }
+            if (cropCatalogCache) return;
 
             cropCatalogStatus.textContent = 'Cargando perfiles desde el catálogo del backend…';
             try {
@@ -3759,11 +3821,119 @@
                 }
                 cropCatalogCache = payload.crops;
                 renderCropProfiles(cropCatalogCache);
-                renderCropDistribution(cropCatalogCache);
                 cropCatalogStatus.textContent = `${payload.totalCrops} perfiles cargados · datos agronómicos preliminares`;
             } catch (error) {
                 console.error('[crop catalog] No se pudieron cargar los perfiles', error);
                 cropCatalogStatus.textContent = 'No se pudieron cargar los perfiles. Verifica que el backend/API esté disponible y vuelve a abrir esta ventana.';
+            }
+        }
+
+        function setCropPlanMessage(message, isError = false) {
+            cropPlanStatus.textContent = message;
+            cropPlanStatus.dataset.error = String(isError);
+        }
+
+        function invalidateCropPlan(message) {
+            cropPlanRequestId += 1;
+            document.getElementById('cropPlanGenerate').disabled = false;
+            greenhouseModel.userData.setCropPlan([]);
+            renderCropDistribution([]);
+            setCropPlanMessage(message);
+        }
+
+        async function generateCropPlan() {
+            if (!cropCatalogCache) {
+                setCropPlanMessage('Espera a que se cargue el catálogo de cultivos.', true);
+                return;
+            }
+            if (selectedCropSlugs.length === 0) {
+                setCropPlanMessage('Selecciona al menos un cultivo.', true);
+                return;
+            }
+
+            const assignments = createCropDistribution(selectedCropSlugs, cropCatalogCache);
+            const selectedInputs = new Map(
+                [...cropProfileCards.querySelectorAll('[data-crop-plant-date]')]
+                    .map((input) => [input.closest('.crop-card').dataset.cropSlug, input.value])
+            );
+            for (const assignment of assignments) {
+                assignment.plantDate = selectedInputs.get(assignment.crop.slug);
+                if (!assignment.plantDate) {
+                    setCropPlanMessage(`Indica la fecha de siembra para ${assignment.crop.name}.`, true);
+                    return;
+                }
+            }
+
+            const requestId = ++cropPlanRequestId;
+            const referenceDate = getLocalCalendarDate();
+            setCropPlanMessage(`Calculando fases fenológicas con fecha de referencia ${referenceDate} (reloj del sistema; simulación provisional)…`);
+            document.getElementById('cropPlanGenerate').disabled = true;
+
+            try {
+                const planned = await Promise.all(assignments.map(async (assignment) => {
+                    if (assignment.plantDate > referenceDate) {
+                        return {
+                            ...assignment,
+                            stage: {
+                                stage: 'Pre-siembra',
+                                stageCode: null,
+                                daysElapsed: 0,
+                                totalDuration: assignment.crop.phenology.reduce(
+                                    (total, stage) => total + stage.durationDays,
+                                    0
+                                ),
+                                percentage: 0,
+                                stageEvidenceStatus: 'pending_verification'
+                            },
+                            overallProgress: 0
+                        };
+                    }
+
+                    const query = new URLSearchParams({
+                        plantDate: assignment.plantDate,
+                        referenceDate
+                    });
+                    const response = await fetch(
+                        `/api/crops/${encodeURIComponent(assignment.crop.slug)}/stage?${query}`,
+                        { cache: 'no-store' }
+                    );
+                    if (!response.ok) {
+                        throw new Error(`No se pudo calcular la fase de ${assignment.crop.name} (HTTP ${response.status})`);
+                    }
+                    const payload = await response.json();
+                    if (!payload.stage || typeof payload.stage.stage !== 'string') {
+                        throw new Error(`Respuesta fenológica inválida para ${assignment.crop.name}`);
+                    }
+                    return {
+                        ...assignment,
+                        stage: payload.stage,
+                        visualStage: getCropVisualStage(assignment.crop, payload.stage),
+                        overallProgress: getOverallPhenologyProgress(assignment.crop, payload.stage)
+                    };
+                }));
+
+                if (requestId !== cropPlanRequestId) return;
+                greenhouseModel.userData.setCropPlan(planned.map((assignment) => ({
+                    bed: assignment.bed,
+                    slug: assignment.crop.slug,
+                    name: assignment.crop.name,
+                    category: assignment.crop.category,
+                    stageName: assignment.stage.stage,
+                    stageCode: assignment.stage.stageCode,
+                    visualStage: assignment.visualStage,
+                    overallProgress: assignment.overallProgress
+                })));
+                renderCropDistribution(planned);
+                setCropPlanMessage(
+                    `Vista aplicada a ${planned.length} camellón(es). Referencia ${referenceDate} del sistema; etapas y duraciones preliminares.`
+                );
+            } catch (error) {
+                console.error('[crop planning] No se pudo generar la distribución', error);
+                setCropPlanMessage(error.message || 'No se pudo calcular la sugerencia.', true);
+            } finally {
+                if (requestId === cropPlanRequestId) {
+                    document.getElementById('cropPlanGenerate').disabled = false;
+                }
             }
         }
 
@@ -3779,6 +3949,14 @@
         cropDialog.addEventListener('close', () => setQuickActionState(null));
         cropDialog.addEventListener('click', (event) => {
             if (event.target === cropDialog) cropDialog.close();
+        });
+        document.getElementById('cropPlanGenerate').addEventListener('click', generateCropPlan);
+        document.getElementById('cropPlanClear').addEventListener('click', () => {
+            cropPlanRequestId += 1;
+            greenhouseModel.userData.setCropPlan([]);
+            renderCropDistribution([]);
+            setCropPlanMessage('Visualización limpiada. Las selecciones y fechas no se guardan.');
+            document.getElementById('cropPlanGenerate').disabled = false;
         });
 
         // ==============================

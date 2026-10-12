@@ -404,6 +404,154 @@ function createBeds(THREE, parent, createLabel) {
   return { group: bedGroup, cropGroup, centers: bedCenters, meshes: bedMeshes };
 }
 
+function createCropVisuals(THREE, parent, bedCenters, plan, createLabel) {
+  while (parent.children.length) {
+    const child = parent.children[0];
+    parent.remove(child);
+    child.traverse?.((object) => {
+      object.geometry?.dispose?.();
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      materials.filter(Boolean).forEach((material) => {
+        material.map?.dispose?.();
+        material.dispose?.();
+      });
+    });
+  }
+
+  const cropColors = {
+    tomate: { leaf: 0x57924f, fruit: 0xe45743 },
+    pimenton: { leaf: 0x579b52, fruit: 0x62b86e },
+    locoto: { leaf: 0x4b8149, fruit: 0xb94452 },
+    pepino: { leaf: 0x69a64c, fruit: 0x4f9844 },
+    lechuga: { leaf: 0x91bb5f, fruit: 0x91bb5f },
+    acelga: { leaf: 0x65a65c, fruit: 0x9f4f62 },
+    espinaca: { leaf: 0x4e8954, fruit: 0x4e8954 }
+  };
+  const cropRoot = new THREE.Group();
+  cropRoot.name = 'crop-plan-visualization';
+  parent.add(cropRoot);
+
+  for (const assignment of plan) {
+    const bedIndex = Number(String(assignment.bed).replace('C', '')) - 1;
+    const colors = cropColors[assignment.slug];
+    if (!Number.isInteger(bedIndex) || bedIndex < 0 || bedIndex >= bedCenters.length || !colors) continue;
+
+    const progress = Math.max(0, Math.min(1, Number(assignment.overallProgress) || 0));
+    const category = assignment.category === 'leaf' ? 'leaf' : 'fruit';
+    const stageName = String(assignment.stageName || '').toLowerCase();
+    const isFlowering = assignment.visualStage === 'flowering';
+    const isFruiting = assignment.visualStage === 'fruiting';
+    const label = createLabel(`${assignment.name} · ${assignment.stageName || 'sin fecha'}`, '#c8edcf', 0.18);
+    label.position.set(bedCenters[bedIndex], 0.55, -GREENHOUSE.length / 2 + 1.2);
+    cropRoot.add(label);
+    if (stageName === 'pre-siembra') continue;
+
+    const height = category === 'leaf'
+      ? 0.14 + progress * 0.48
+      : 0.18 + progress * 1.35;
+    const plantCount = 18;
+    const plantSpacing = (GREENHOUSE.length - GREENHOUSE.bedLengthInset * 2) / (plantCount + 1);
+    const baseZ = -(plantCount - 1) * plantSpacing / 2;
+    const stemMesh = new THREE.InstancedMesh(
+      new THREE.CylinderGeometry(0.018, 0.035, 1, 6),
+      new THREE.MeshStandardMaterial({ color: category === 'leaf' ? 0x7e9d54 : 0x477b42, roughness: 0.82 }),
+      plantCount
+    );
+    const leafMesh = new THREE.InstancedMesh(
+      new THREE.SphereGeometry(1, 7, 5),
+      new THREE.MeshStandardMaterial({ color: colors.leaf, roughness: 0.88 }),
+      plantCount * (category === 'leaf' ? 7 : 6)
+    );
+    const fruitMesh = new THREE.InstancedMesh(
+      new THREE.SphereGeometry(1, 8, 6),
+      new THREE.MeshStandardMaterial({ color: colors.fruit, roughness: 0.7 }),
+      Math.max(1, plantCount * 3)
+    );
+    const flowerMesh = new THREE.InstancedMesh(
+      new THREE.SphereGeometry(1, 6, 5),
+      new THREE.MeshStandardMaterial({ color: 0xf2d36e, roughness: 0.75 }),
+      Math.max(1, plantCount * 2)
+    );
+    const transform = new THREE.Object3D();
+    let leafIndex = 0;
+    let fruitIndex = 0;
+    let flowerIndex = 0;
+
+    for (let plant = 0; plant < plantCount; plant += 1) {
+      const z = baseZ + plant * plantSpacing;
+      const x = bedCenters[bedIndex] + Math.sin(plant * 2.17) * 0.23;
+      transform.position.set(x, GREENHOUSE.bedHeight + height / 2, z);
+      transform.rotation.set(0, 0, Math.sin(plant * 1.37) * 0.07);
+      transform.scale.set(1, height, 1);
+      transform.updateMatrix();
+      stemMesh.setMatrixAt(plant, transform.matrix);
+
+      const leavesPerPlant = category === 'leaf'
+        ? Math.max(2, Math.round(2 + progress * 5))
+        : Math.max(2, Math.round(2 + progress * 4));
+      for (let leaf = 0; leaf < leavesPerPlant; leaf += 1) {
+        const angle = (leaf / leavesPerPlant) * Math.PI * 2 + (plant % 3) * 0.45;
+        const level = category === 'leaf'
+          ? 0.16 + (leaf % 3) * height * 0.2
+          : height * (0.3 + (leaf % 3) * 0.2);
+        const radius = category === 'leaf' ? 0.12 + progress * 0.2 : 0.13 + progress * 0.11;
+        transform.position.set(
+          x + Math.cos(angle) * radius,
+          GREENHOUSE.bedHeight + level,
+          z + Math.sin(angle) * radius
+        );
+        transform.rotation.set(0, -angle, category === 'leaf' ? -0.16 : -0.32);
+        transform.scale.set(
+          category === 'leaf' ? 0.2 + progress * 0.18 : 0.16 + progress * 0.1,
+          0.035 + progress * 0.02,
+          category === 'leaf' ? 0.12 + progress * 0.08 : 0.09
+        );
+        transform.updateMatrix();
+        leafMesh.setMatrixAt(leafIndex++, transform.matrix);
+      }
+
+      if (isFruiting) {
+        for (let fruit = 0; fruit < 2; fruit += 1) {
+          transform.position.set(
+            x + (fruit === 0 ? -0.12 : 0.12),
+            GREENHOUSE.bedHeight + height * (0.48 + fruit * 0.18),
+            z + (plant % 2 ? 0.12 : -0.12)
+          );
+          transform.rotation.set(0, 0, 0);
+          transform.scale.set(0.12 + progress * 0.04, 0.12 + progress * 0.04, 0.12 + progress * 0.04);
+          transform.updateMatrix();
+          fruitMesh.setMatrixAt(fruitIndex++, transform.matrix);
+        }
+      } else if (isFlowering) {
+        transform.position.set(x, GREENHOUSE.bedHeight + height, z);
+        transform.scale.set(0.065, 0.065, 0.065);
+        transform.updateMatrix();
+        flowerMesh.setMatrixAt(flowerIndex++, transform.matrix);
+      }
+    }
+
+    stemMesh.name = `crop-stems-${assignment.slug}-${assignment.bed}`;
+    leafMesh.name = `crop-leaves-${assignment.slug}-${assignment.bed}`;
+    fruitMesh.name = `crop-fruits-${assignment.slug}-${assignment.bed}`;
+    flowerMesh.name = `crop-flowers-${assignment.slug}-${assignment.bed}`;
+    leafMesh.count = leafIndex;
+    fruitMesh.count = fruitIndex;
+    flowerMesh.count = flowerIndex;
+    cropRoot.add(stemMesh, leafMesh);
+    if (fruitIndex) cropRoot.add(fruitMesh);
+    else {
+      fruitMesh.geometry.dispose();
+      fruitMesh.material.dispose();
+    }
+    if (flowerIndex) cropRoot.add(flowerMesh);
+    else {
+      flowerMesh.geometry.dispose();
+      flowerMesh.material.dispose();
+    }
+
+  }
+}
+
 function createBedSelection(THREE, parent, bedMeshes) {
   const material = new THREE.LineBasicMaterial({ color: 0x6be6d0, transparent: true, opacity: 0.95 });
   const outlines = bedMeshes.map((bed) => {
@@ -1488,7 +1636,9 @@ export function createGreenhouseModel(THREE, createLabel) {
     group: ridgeVentilation.group,
     lateralGroup: lateralVentilation.group,
     updateVisualState: (active, elapsed) => updateVentilationVisualState(ridgeVentilation, active, elapsed)
-  }, iotArchitecture, connectivity, powerSystem, powerDistribution, exteriorDoor: antechamber, educationalComponents, setBedHighlight: bedSelection.setBedHighlight, setServiceHighlight: (active) => {
+  }, iotArchitecture, connectivity, powerSystem, powerDistribution, exteriorDoor: antechamber, educationalComponents,
+  setCropPlan: (plan) => createCropVisuals(THREE, beds.cropGroup, beds.centers, plan, createLabel),
+  setBedHighlight: bedSelection.setBedHighlight, setServiceHighlight: (active) => {
     serviceHighlight.visible = active;
   }, ...zones };
   return group;
