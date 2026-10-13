@@ -509,12 +509,13 @@ function createCropVisualEntry(THREE, cropRoot, assignment, bedCenters, plantCou
     fruitMesh,
     flowerMesh,
     visualStage: '',
-    labelText: '',
-    animationPhase: (Number(String(assignment.bed).replace('C', '')) || 1) * 0.6
+    labelText: ''
   };
 }
 
 function updateCropVisualEntry(THREE, entry, assignment) {
+  entry.group.rotation.set(0, 0, 0);
+  entry.group.scale.set(1, 1, 1);
   const progress = Math.max(0, Math.min(1, Number(assignment.overallProgress) || 0));
   const visualGrowth = 0.18 + Math.sqrt(progress) * 0.82;
   const stageProgress = Math.max(0, Math.min(1, Number(assignment.stageProgress) || 0));
@@ -681,17 +682,7 @@ function createCropVisuals(THREE, parent, bedCenters, plan, createLabel) {
     visuals.delete(key);
   }
 
-  parent.userData.updateCropAnimation = (elapsed) => {
-    visuals.forEach((entry) => {
-      const amplitude = entry.visualStage === 'emergence' ? 0.07
-        : entry.visualStage === 'flowering' ? 0.17
-          : entry.visualStage === 'fruiting' ? 0.1
-            : entry.visualStage === 'leaf-harvest' ? 0.18 : 0.14;
-      const sway = Math.sin(elapsed * 1.7 + entry.animationPhase) * amplitude;
-      entry.group.rotation.set(sway * 0.35, 0, sway);
-      entry.group.scale.y = 1 + Math.sin(elapsed * 2.2 + entry.animationPhase) * 0.035;
-    });
-  };
+  delete parent.userData.updateCropAnimation;
 }
 
 function createBedSelection(THREE, parent, bedMeshes) {
