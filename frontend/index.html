@@ -2812,16 +2812,13 @@
             if (bedCenters.length === 0) return;
 
             const centerX = bedCenters.reduce((total, x) => total + x, 0) / bedCenters.length;
-            const center = new THREE.Vector3(centerX, 0.7, -10);
-            const direction = new THREE.Vector3(0.05, 0.5, -1).normalize();
-            const distance = Math.max(8, 6 + bedCenters.length * 2);
-            tweenStartPos.copy(camera.position);
-            tweenEndPos.copy(center).addScaledVector(direction, distance);
-            tweenStartTarget.copy(controls.target);
-            tweenEndTarget.copy(center);
-            tweenProgress = 0;
-            tweenActive = true;
-            controls.enabled = false;
+            const center = new THREE.Vector3(centerX, 0.7, 0);
+            const side = centerX < 0 ? 1 : -1;
+            camera.position.set(centerX + side * 2.5, 4.2, 6);
+            controls.target.copy(center);
+            tweenActive = false;
+            controls.enabled = true;
+            controls.update();
             window.__inverniaFocusTarget = 'crop-plan';
         }
 

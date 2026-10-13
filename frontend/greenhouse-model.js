@@ -451,6 +451,7 @@ function createCropVisualEntry(THREE, cropRoot, assignment, bedCenters, plantCou
   const group = new THREE.Group();
   group.name = `crop-plants-${assignment.slug}-${assignment.bed}`;
   group.position.x = bedCenters[Number(String(assignment.bed).replace('C', '')) - 1];
+  group.rotation.set(0, 0, 0);
   const stemMesh = new THREE.InstancedMesh(
     new THREE.CylinderGeometry(0.03, 0.05, 1, 6),
     new THREE.MeshStandardMaterial({
@@ -515,7 +516,7 @@ function createCropVisualEntry(THREE, cropRoot, assignment, bedCenters, plantCou
 
 function updateCropVisualEntry(THREE, entry, assignment) {
   const progress = Math.max(0, Math.min(1, Number(assignment.overallProgress) || 0));
-  const visualGrowth = Math.sqrt(progress);
+  const visualGrowth = 0.18 + Math.sqrt(progress) * 0.82;
   const stageProgress = Math.max(0, Math.min(1, Number(assignment.stageProgress) || 0));
   const positions = assignment.plantLayout.positions;
   const isPlanted = String(assignment.stageName || '').toLowerCase() !== 'pre-siembra';
@@ -523,8 +524,8 @@ function updateCropVisualEntry(THREE, entry, assignment) {
   const isFruiting = assignment.visualStage === 'fruiting';
   const isLeafHarvest = assignment.visualStage === 'leaf-harvest';
   const height = entry.category === 'leaf'
-    ? 0.08 + visualGrowth * 0.92
-    : 0.12 + visualGrowth * 1.28;
+    ? 0.12 + visualGrowth * 0.92
+    : 0.16 + visualGrowth * 1.28;
   const horizontalScale = Math.min(
     1,
     assignment.plantLayout.plantSpacing / 1.4,
@@ -681,15 +682,14 @@ function createCropVisuals(THREE, parent, bedCenters, plan, createLabel) {
   }
 
   parent.userData.updateCropAnimation = (elapsed) => {
-    visuals.forEach((entry, index) => {
+    visuals.forEach((entry) => {
       const amplitude = entry.visualStage === 'emergence' ? 0.07
         : entry.visualStage === 'flowering' ? 0.17
           : entry.visualStage === 'fruiting' ? 0.1
             : entry.visualStage === 'leaf-harvest' ? 0.18 : 0.14;
-      const sway = Math.sin(elapsed * 1.7 + entry.animationPhase + index) * amplitude;
-      entry.group.rotation.z = sway;
+      const sway = Math.sin(elapsed * 1.7 + entry.animationPhase) * amplitude;
+      entry.group.rotation.set(sway * 0.35, 0, sway);
       entry.group.scale.y = 1 + Math.sin(elapsed * 2.2 + entry.animationPhase) * 0.035;
-      entry.group.rotation.x = Math.sin(elapsed * 1.1 + entry.animationPhase) * amplitude * 0.35;
     });
   };
 }
@@ -1779,7 +1779,10 @@ export function createGreenhouseModel(THREE, createLabel) {
     lateralGroup: lateralVentilation.group,
     updateVisualState: (active, elapsed) => updateVentilationVisualState(ridgeVentilation, active, elapsed)
   }, iotArchitecture, connectivity, powerSystem, powerDistribution, exteriorDoor: antechamber, educationalComponents,
-  setCropPlan: (plan) => createCropVisuals(THREE, beds.cropGroup, beds.centers, plan, createLabel),
+  setCropPlan: (plan) => {
+    cover.filmGroup.visible = plan.length === 0;
+    createCropVisuals(THREE, beds.cropGroup, beds.centers, plan, createLabel);
+  },
   updateCropAnimation: (elapsed) => beds.cropGroup.userData.updateCropAnimation?.(elapsed),
   setBedHighlight: bedSelection.setBedHighlight, setServiceHighlight: (active) => {
     serviceHighlight.visible = active;
