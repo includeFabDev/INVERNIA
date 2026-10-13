@@ -1591,7 +1591,7 @@
             advanceScenarioCalendar,
             calculatePlantLayout,
             createCropDistribution,
-            estimateCropStage,
+            estimateCropStageAtTimestamp,
             getCropStageTransitions,
             getCropVisualStage,
             getLocalCalendarDate,
@@ -3741,6 +3741,7 @@
         const selectedCropSlugs = [];
         let activeCropPlan = [];
         let cropPlanLastRenderDate = '';
+        let lastCropVisualUpdateAt = 0;
         let cropCycleId = 0;
         const cropStageByAssignment = new Map();
         const cropStageEventKeys = new Set();
@@ -3991,7 +3992,7 @@
             return sim.virtualInstantMs;
         }
 
-        function renderCropPlanAt(timestampMs) {
+        function renderCropPlanAt(timestampMs, { updateDetails = true } = {}) {
             const referenceDate = getLocalCalendarDate(new Date(timestampMs));
             let plantLayout;
             try {
@@ -4024,7 +4025,11 @@
                         stageEvidenceStatus: 'pending_verification'
                     };
                 } else {
-                    stage = estimateCropStage(assignment.crop, assignment.plantDate, referenceDate);
+                    stage = estimateCropStageAtTimestamp(
+                        assignment.crop,
+                        assignment.plantDate,
+                        timestampMs
+                    );
                 }
                 return {
                     ...assignment,
@@ -4064,14 +4069,17 @@
                 stageCode: assignment.stage.stageCode,
                 visualStage: assignment.visualStage,
                 overallProgress: assignment.overallProgress,
+                stageProgress: assignment.stage.percentage / 100,
                 plantLayout: assignment.plantLayout
             })));
-            renderCropDistribution(planned);
-            const simulatedDay = Math.max(
-                0,
-                Math.floor((timestampMs - sim.virtualStartInstantMs) / 86400000)
-            );
-            cropMonitorDate.textContent = `Siguiendo Monitoreo · ${referenceDate} · día simulado ${simulatedDay}`;
+            if (updateDetails) {
+                renderCropDistribution(planned);
+                const simulatedDay = Math.max(
+                    0,
+                    Math.floor((timestampMs - sim.virtualStartInstantMs) / 86400000)
+                );
+                cropMonitorDate.textContent = `Siguiendo Monitoreo · ${referenceDate} · día simulado ${simulatedDay}`;
+            }
             return true;
         }
 
@@ -4079,10 +4087,13 @@
             if (!activeCropPlan.length || simModeSelect.value !== 'sim') return;
             const timestampMs = sim.virtualInstantMs;
             const referenceDate = getLocalCalendarDate(new Date(timestampMs));
-            if (referenceDate === cropPlanLastRenderDate) return;
-            if (!renderCropPlanAt(timestampMs)) {
+            const now = performance.now();
+            const dateChanged = referenceDate !== cropPlanLastRenderDate;
+            if (!dateChanged && now - lastCropVisualUpdateAt < 100) return;
+            if (!renderCropPlanAt(timestampMs, { updateDetails: dateChanged })) {
                 setCropPlanMessage('No se pudo actualizar la visualización fenológica.', true);
             }
+            lastCropVisualUpdateAt = now;
         }
 
         function invalidateCropPlan(message) {

@@ -6,6 +6,7 @@ import {
   calculatePlantLayout,
   createCropDistribution,
   estimateCropStage,
+  estimateCropStageAtTimestamp,
   getAcceleratedTimestamp,
   getCropStageTransitions,
   getCropVisualStage,
@@ -182,6 +183,34 @@ test('estimates fruit and leaf stages from each profile duration at a simulated 
   assert.equal(estimateCropStage(leafCrop, '2026-10-12', '2026-10-16').daysToNextStage, 1);
   assert.equal(estimateCropStage(leafCrop, '2026-10-12', '2026-10-17').stage, 'Hojas');
   assert.throws(() => estimateCropStage(fruitCrop, 'invalid', '2026-10-15'), TypeError);
+});
+
+test('estimates continuous crop growth between simulated midnight boundaries', () => {
+  const crop = {
+    phenology: [
+      { code: 'V0', name: 'Emergencia', durationDays: 2 },
+      { code: 'V1', name: 'Plántula', durationDays: 4 }
+    ]
+  };
+  const plantingMidnight = new Date(2026, 9, 12).getTime();
+
+  const halfDay = estimateCropStageAtTimestamp(crop, '2026-10-12', plantingMidnight + 12 * 3600000);
+  assert.equal(halfDay.stage, 'Emergencia');
+  assert.equal(halfDay.daysElapsed, 0.5);
+  assert.equal(halfDay.percentage, 25);
+  assert.ok(Math.abs(getOverallPhenologyProgress(crop, halfDay) - 0.5 / 6) < 1e-9);
+
+  const afterStageBoundary = estimateCropStageAtTimestamp(
+    crop,
+    '2026-10-12',
+    plantingMidnight + 2 * 86400000 + 3600000
+  );
+  assert.equal(afterStageBoundary.stage, 'Plántula');
+  assert.equal(afterStageBoundary.percentage, 1);
+  assert.throws(
+    () => estimateCropStageAtTimestamp(crop, '2026-02-30', plantingMidnight),
+    TypeError
+  );
 });
 
 test('reports each configured stage transition once across skipped simulated days', () => {

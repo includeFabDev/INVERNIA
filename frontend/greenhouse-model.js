@@ -516,13 +516,15 @@ function createCropVisualEntry(THREE, cropRoot, assignment, bedCenters, plantCou
 function updateCropVisualEntry(THREE, entry, assignment) {
   const progress = Math.max(0, Math.min(1, Number(assignment.overallProgress) || 0));
   const visualGrowth = Math.sqrt(progress);
+  const stageProgress = Math.max(0, Math.min(1, Number(assignment.stageProgress) || 0));
   const positions = assignment.plantLayout.positions;
   const isPlanted = String(assignment.stageName || '').toLowerCase() !== 'pre-siembra';
   const isFlowering = assignment.visualStage === 'flowering';
   const isFruiting = assignment.visualStage === 'fruiting';
+  const isLeafHarvest = assignment.visualStage === 'leaf-harvest';
   const height = entry.category === 'leaf'
-    ? 0.08 + visualGrowth * 0.72
-    : 0.12 + visualGrowth * 1.12;
+    ? 0.08 + visualGrowth * 0.92
+    : 0.12 + visualGrowth * 1.28;
   const horizontalScale = Math.min(
     1,
     assignment.plantLayout.plantSpacing / 1.4,
@@ -544,15 +546,15 @@ function updateCropVisualEntry(THREE, entry, assignment) {
     entry.stemMesh.setMatrixAt(plant, transform.matrix);
 
     const leavesPerPlant = entry.category === 'leaf'
-      ? Math.max(1, Math.round(1 + visualGrowth * 6))
+      ? Math.max(1, Math.round(1 + visualGrowth * (isLeafHarvest ? 6 : 5)))
       : Math.max(1, Math.round(1 + visualGrowth * 5));
     for (let leaf = 0; leaf < leavesPerPlant; leaf += 1) {
       const angle = (leaf / leavesPerPlant) * Math.PI * 2 + (plant % 3) * 0.45;
       const level = entry.category === 'leaf'
-        ? 0.19 + (leaf % 4) * height * 0.17
+        ? 0.14 + (leaf % 4) * height * (isLeafHarvest ? 0.2 : 0.15)
         : height * (0.42 + (leaf % 3) * 0.16);
       const radius = entry.category === 'leaf'
-        ? 0.12 + visualGrowth * 0.24
+        ? 0.16 + visualGrowth * (isLeafHarvest ? 0.34 : 0.28)
         : 0.1 + visualGrowth * 0.16;
       transform.position.set(
         x + Math.cos(angle) * radius * horizontalScale,
@@ -561,9 +563,13 @@ function updateCropVisualEntry(THREE, entry, assignment) {
       );
       transform.rotation.set(0, -angle, entry.category === 'leaf' ? -0.16 : -0.32);
       transform.scale.set(
-      (entry.category === 'leaf' ? 0.14 + visualGrowth * 0.34 : 0.12 + visualGrowth * 0.24) * horizontalScale,
-      0.025 + visualGrowth * 0.06,
-      (entry.category === 'leaf' ? 0.08 + visualGrowth * 0.24 : 0.07 + visualGrowth * 0.16) * horizontalScale
+        (entry.category === 'leaf'
+          ? 0.18 + visualGrowth * (isLeafHarvest ? 0.48 : 0.36)
+          : 0.14 + visualGrowth * 0.28) * horizontalScale,
+        0.03 + visualGrowth * 0.08,
+        (entry.category === 'leaf'
+          ? 0.1 + visualGrowth * (isLeafHarvest ? 0.34 : 0.26)
+          : 0.08 + visualGrowth * 0.18) * horizontalScale
       );
       transform.updateMatrix();
       entry.leafMesh.setMatrixAt(leafIndex++, transform.matrix);
@@ -577,13 +583,20 @@ function updateCropVisualEntry(THREE, entry, assignment) {
           z + (plant % 2 ? 0.12 : -0.12) * horizontalScale
         );
         transform.rotation.set(0, 0, 0);
-        transform.scale.setScalar((0.08 + visualGrowth * 0.09) * horizontalScale);
+        const fruitMaturity = 0.5 + progress * 0.5;
+        const fruitWidth = assignment.slug === 'pepino' ? 0.75 : 1;
+        transform.scale.set(
+          (0.07 + visualGrowth * 0.12) * horizontalScale * fruitWidth * fruitMaturity,
+          (0.08 + visualGrowth * 0.13) * horizontalScale * fruitMaturity,
+          (0.07 + visualGrowth * 0.12) * horizontalScale * fruitMaturity
+        );
         transform.updateMatrix();
         entry.fruitMesh.setMatrixAt(fruitIndex++, transform.matrix);
       }
     } else if (isFlowering) {
       transform.position.set(x, GREENHOUSE.bedHeight + height, z);
-      transform.scale.setScalar(0.065 * horizontalScale);
+      const flowerSize = (0.045 + stageProgress * 0.035) * horizontalScale;
+      transform.scale.set(flowerSize, flowerSize, flowerSize);
       transform.updateMatrix();
       entry.flowerMesh.setMatrixAt(flowerIndex++, transform.matrix);
     }
@@ -670,11 +683,13 @@ function createCropVisuals(THREE, parent, bedCenters, plan, createLabel) {
   parent.userData.updateCropAnimation = (elapsed) => {
     visuals.forEach((entry, index) => {
       const amplitude = entry.visualStage === 'emergence' ? 0.07
-        : entry.visualStage === 'flowering' ? 0.11
-          : entry.visualStage === 'fruiting' ? 0.08 : 0.12;
-      const sway = Math.sin(elapsed * 1.4 + entry.animationPhase + index) * amplitude;
+        : entry.visualStage === 'flowering' ? 0.17
+          : entry.visualStage === 'fruiting' ? 0.1
+            : entry.visualStage === 'leaf-harvest' ? 0.18 : 0.14;
+      const sway = Math.sin(elapsed * 1.7 + entry.animationPhase + index) * amplitude;
       entry.group.rotation.z = sway;
-      entry.group.scale.y = 1 + Math.abs(sway) * 0.8;
+      entry.group.scale.y = 1 + Math.sin(elapsed * 2.2 + entry.animationPhase) * 0.035;
+      entry.group.rotation.x = Math.sin(elapsed * 1.1 + entry.animationPhase) * amplitude * 0.35;
     });
   };
 }

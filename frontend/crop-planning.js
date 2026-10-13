@@ -158,6 +158,35 @@ export function estimateCropStage(crop, plantDate, referenceDate) {
   }
 
   const daysElapsed = Math.max(0, Math.round((referenceTime - plantTime) / MILLISECONDS_PER_DAY));
+  return estimateCropStageAtDaysElapsed(crop, daysElapsed, plantTime);
+}
+
+export function estimateCropStageAtTimestamp(crop, plantDate, referenceTimestampMs) {
+  if (!crop || !Array.isArray(crop.phenology) || crop.phenology.length === 0) {
+    throw new TypeError('A crop with phenology stages is required');
+  }
+  if (typeof plantDate !== 'string' || !Number.isFinite(referenceTimestampMs)) {
+    throw new TypeError('A planting date and valid reference timestamp are required');
+  }
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(plantDate);
+  if (!match) throw new TypeError('A valid planting date is required');
+  const [, year, month, day] = match;
+  const localPlantDate = new Date(Number(year), Number(month) - 1, Number(day));
+  if (getLocalCalendarDate(localPlantDate) !== plantDate) {
+    throw new TypeError('A valid planting date is required');
+  }
+  const elapsedDays = Math.max(
+    0,
+    (referenceTimestampMs - localPlantDate.getTime()) / MILLISECONDS_PER_DAY
+  );
+  return estimateCropStageAtDaysElapsed(
+    crop,
+    elapsedDays,
+    Date.UTC(Number(year), Number(month) - 1, Number(day))
+  );
+}
+
+function estimateCropStageAtDaysElapsed(crop, daysElapsed, plantTime) {
   const totalDuration = crop.phenology.reduce(
     (total, stage) => total + (Number(stage.durationDays) || 0),
     0
