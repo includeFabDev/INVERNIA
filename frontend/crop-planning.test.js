@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  advanceScenarioCalendar,
   calculatePlantLayout,
   createCropDistribution,
   estimateCropStage,
@@ -23,6 +24,23 @@ const catalog = [
   { slug: 'espinaca', name: 'Espinaca', phenology: [{ durationDays: 30 }] },
   { slug: 'pimenton', name: 'Pimentón', phenology: [{ durationDays: 30 }] }
 ];
+
+test('advances the shared scenario calendar at each monitoring clock speed', () => {
+  const start = Date.UTC(2025, 0, 1);
+
+  assert.equal(advanceScenarioCalendar(start, 1, 1), start + 60 * 60000);
+  assert.equal(advanceScenarioCalendar(start, 1, 10), start + 10 * 60 * 60000);
+  assert.equal(advanceScenarioCalendar(start, 1, 60), start + 60 * 60 * 60000);
+  assert.equal(advanceScenarioCalendar(start, 1, 360), start + 360 * 60 * 60000);
+  for (const speed of [1, 10, 60, 360]) {
+    const realSecondsPerDay = 24 / speed;
+    assert.ok(Math.abs(
+      advanceScenarioCalendar(start, realSecondsPerDay, speed) - start - 86400000
+    ) < 1);
+  }
+  assert.throws(() => advanceScenarioCalendar(start, -1, 1), TypeError);
+  assert.throws(() => advanceScenarioCalendar(start, 1, 0), TypeError);
+});
 
 test('assigns each selected crop to one distinct longitudinal bed crossing A, B, and C', () => {
   const plan = createCropDistribution(['pepino', 'lechuga'], catalog);

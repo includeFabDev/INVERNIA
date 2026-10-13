@@ -56,6 +56,27 @@
             pointer-events: none;
             background: linear-gradient(to bottom, rgba(7, 11, 7, 0.9), transparent);
         }
+        .main-virtual-clock {
+            position: fixed;
+            top: 64px;
+            left: 50%;
+            z-index: 18;
+            display: grid;
+            justify-items: center;
+            gap: 4px;
+            max-width: calc(100vw - 24px);
+            padding: 7px 11px;
+            border: 1px solid rgba(184,239,202,0.25);
+            border-radius: 9px;
+            background: rgba(12,20,12,0.84);
+            color: #d9e9dc;
+            font: 600 11px 'Space Grotesk', sans-serif;
+            text-align: center;
+            transform: translateX(-50%);
+            pointer-events: none;
+            backdrop-filter: blur(10px);
+        }
+        .main-virtual-clock [aria-live] { color: #b8efca; }
 
         .top-bar .dot {
             width: 10px;
@@ -954,8 +975,6 @@
         .crop-plant-date input { width: 100%; padding: 7px 9px; border: 1px solid rgba(255,255,255,0.14); border-radius: 7px; background: rgba(0,0,0,0.28); color: var(--fg); font: 11px 'Space Grotesk', sans-serif; }
         .crop-plant-date input:disabled { opacity: 0.45; }
         .crop-plan-controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-        .crop-clock-speed { display: flex; align-items: center; gap: 7px; color: #c5d5c8; font-size: 11px; }
-        .crop-clock-speed select { padding: 7px 9px; border: 1px solid rgba(255,255,255,0.14); border-radius: 7px; background: #172119; color: var(--fg); font: 11px 'Space Grotesk', sans-serif; }
         .crop-clock-date { align-self: center; color: #b8efca; font-size: 11px; font-variant-numeric: tabular-nums; }
         .crop-layout-settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 9px; margin: 12px 0; padding: 12px; border: 1px solid rgba(255,255,255,0.09); border-radius: 10px; }
         .crop-layout-settings label { display: grid; gap: 5px; color: #aab9ad; font-size: 10px; }
@@ -1032,6 +1051,7 @@
         .walk-reticle[hidden] { display: none; }
 
         body.walk-mode .top-bar,
+        body.walk-mode .main-virtual-clock,
         body.walk-mode .quick-actions,
         body.walk-mode .nav-bar,
         body.walk-mode .side-drawer-tab,
@@ -1145,6 +1165,7 @@
         /* Responsive */
         @media (max-width: 768px) {
             .debug-hud { display: none; }
+            .main-virtual-clock { top: 58px; font-size: 10px; }
 
             .monitor-panel {
                 top: 58px;
@@ -1269,6 +1290,10 @@
         <button class="quick-action" type="button" data-action="walk">Caminar</button>
         <button class="quick-action" type="button" id="cropCatalogOpen" data-action="crops" aria-haspopup="dialog" aria-controls="cropDialog">Cultivos</button>
     </div>
+    <div class="main-virtual-clock" aria-label="Calendario de la simulación">
+        <span id="mainVirtualClockDate">Fecha de simulación: --</span>
+        <span id="mainCropStageNotice" role="status" aria-live="polite">Sin cambios de fase</span>
+    </div>
 
     <dialog class="crop-dialog" id="cropDialog" aria-labelledby="cropDialogTitle">
         <div class="crop-dialog-inner">
@@ -1292,21 +1317,11 @@
             </section>
             <section aria-labelledby="cropMapHeading">
                 <h3 class="crop-section-title" id="cropMapHeading">SELECCIONA QUÉ QUIERES SEMBRAR · MÁXIMO 6 CULTIVOS</h3>
-                <p class="crop-map-note">La fecha de siembra se captura por cultivo. El crecimiento sigue el reloj del escenario activo; x1 mantiene la sincronización y x3/x7 acelera solo el crecimiento. Las etapas y duraciones son preliminares.</p>
+                <p class="crop-map-note">La fecha de siembra se captura por cultivo. Para que las plantas sigan el mismo reloj y velocidad x1/x10/x60/x360 del panel Monitoreo, activa allí “Simulación local”. La fecha del calendario empieza hoy; las etapas y duraciones son preliminares.</p>
                 <div class="crop-plan-controls">
                     <button class="quick-action" id="cropPlanGenerate" type="button">Generar sugerencia y visualizar</button>
                     <button class="quick-action" id="cropPlanClear" type="button">Limpiar visualización</button>
-                    <label class="crop-clock-speed" for="cropClockSpeed">
-                        Crecimiento
-                        <select id="cropClockSpeed" disabled>
-                            <option value="1">Sincronizado x1</option>
-                            <option value="3">Acelerado x3</option>
-                            <option value="7">Acelerado x7</option>
-                        </select>
-                    </label>
-                    <button class="quick-action" id="cropClockToggle" type="button" disabled>Iniciar reloj</button>
-                    <button class="quick-action" id="cropClockReset" type="button" disabled>Volver al día 0</button>
-                    <output class="crop-clock-date" id="cropClockDate" aria-live="off">Sin simulación activa</output>
+                    <output class="crop-clock-date" id="cropMonitorDate" aria-live="off">La fenología seguirá la fecha y velocidad del reloj en Monitoreo.</output>
                 </div>
                 <fieldset class="crop-layout-settings">
                     <legend class="crop-section-title">DISTRIBUCIÓN ESTIMADA · CONFIGURACIÓN ILUSTRATIVA, NO VALIDADA</legend>
@@ -1573,13 +1588,14 @@
             createGreenhouseModel
         } from '/frontend/greenhouse-model.js';
         import {
+            advanceScenarioCalendar,
             calculatePlantLayout,
             createCropDistribution,
             estimateCropStage,
             getCropStageTransitions,
             getCropVisualStage,
+            getLocalCalendarDate,
             getOverallPhenologyProgress,
-            getScenarioSynchronizedTimestamp
         } from '/frontend/crop-planning.js';
 
         /* ==============================
@@ -3724,29 +3740,15 @@
 
         const selectedCropSlugs = [];
         let activeCropPlan = [];
-        let cropClockInterval = null;
-        let cropClockStartedAtMs = 0;
-        let cropClockBaseMs = 0;
-        let cropClockStartMs = 0;
-        let cropClockEndMs = 0;
-        let cropClockScenarioStartMinutes = 0;
-        let cropClockScenarioStartRealMs = 0;
-        let cropClockScenarioMinutesPerSecond = 1 / 60;
-        let cropClockLastTimestampMs = 0;
-        let cropClockSpeedMultiplier = 1;
-        let cropClockRunning = false;
-        let cropClockComplete = false;
-        let cropClockLastRenderDate = '';
+        let cropPlanLastRenderDate = '';
         let cropCycleId = 0;
         const cropStageByAssignment = new Map();
         const cropStageEventKeys = new Set();
         const cropStageToast = document.getElementById('cropStageToast');
         const cropStageToastQueue = [];
         let cropStageToastTimer = null;
-        const cropClockSpeed = document.getElementById('cropClockSpeed');
-        const cropClockToggle = document.getElementById('cropClockToggle');
-        const cropClockReset = document.getElementById('cropClockReset');
-        const cropClockDate = document.getElementById('cropClockDate');
+        const mainCropStageNotice = document.getElementById('mainCropStageNotice');
+        const cropMonitorDate = document.getElementById('cropMonitorDate');
         const cropPlanStatus = document.getElementById('cropPlanStatus');
         const cropPlanGenerate = document.getElementById('cropPlanGenerate');
 
@@ -3822,6 +3824,7 @@
             cropStageByAssignment.clear();
             cropStageEvents.replaceChildren();
             cropStageNotification.textContent = '';
+            if (mainCropStageNotice) mainCropStageNotice.textContent = 'Sin cambios de fase';
             cropStageToastQueue.length = 0;
             if (cropStageToastTimer !== null) {
                 clearTimeout(cropStageToastTimer);
@@ -3850,9 +3853,17 @@
             const transitionTime = Date.parse(`${assignment.plantDate}T00:00:00Z`)
                 + transition.day * 86400000;
             const transitionDate = new Date(transitionTime).toISOString().slice(0, 10);
-            const simulatedDay = Math.max(0, Math.floor((transitionTime - cropClockStartMs) / 86400000));
+            const simulatedDay = Math.max(0, Math.floor(
+                (Date.parse(`${transitionDate}T00:00:00Z`)
+                    - Date.parse(`${getLocalCalendarDate(new Date(sim.virtualStartInstantMs))}T00:00:00Z`))
+                    / 86400000
+            ));
             const message = `${assignment.crop.name} en ${assignment.bed}: ${transition.stage} · ${transitionDate} · día simulado ${simulatedDay}.`;
             cropStageNotification.textContent = message;
+            if (mainCropStageNotice) {
+                mainCropStageNotice.textContent = `🌱 ${assignment.crop.name} ${assignment.bed} → ${transition.stage}`;
+                mainCropStageNotice.title = message;
+            }
             cropStageToastQueue.push(`🌱 Cambio de etapa · ${message}`);
             if (cropStageToastTimer === null) displayNextCropStageToast();
             const eventItem = document.createElement('li');
@@ -3969,43 +3980,19 @@
             cropPlanStatus.dataset.error = String(isError);
         }
 
-        function setCropClockEnabled(enabled) {
-            cropClockSpeed.disabled = !enabled;
-            cropClockToggle.disabled = !enabled || cropClockComplete;
-            cropClockReset.disabled = !enabled;
-        }
-
-        function stopCropClock() {
-            if (cropClockInterval !== null) {
-                clearInterval(cropClockInterval);
-                cropClockInterval = null;
-            }
-            cropClockRunning = false;
-            cropClockComplete = false;
+        function clearActiveCropPlan() {
             activeCropPlan = [];
             cropCycleId += 1;
             clearCropStageEvents();
-            setCropClockEnabled(false);
-            cropClockToggle.textContent = 'Iniciar reloj';
-            cropClockDate.textContent = 'Sin simulación activa';
+            cropMonitorDate.textContent = 'La fenología seguirá la fecha y velocidad del reloj en Monitoreo.';
         }
 
-        function currentCropClockMs(now = Date.now()) {
-            if (!cropClockRunning) return cropClockBaseMs;
-            const elapsedScenarioMinutes = simModeSelect.value === 'sim'
-                ? Math.max(0, sim.minutesOfDay - cropClockScenarioStartMinutes)
-                : (now - cropClockScenarioStartRealMs) / 1000 * cropClockScenarioMinutesPerSecond;
-            return getScenarioSynchronizedTimestamp(
-                cropClockBaseMs,
-                elapsedScenarioMinutes,
-                cropClockSpeedMultiplier,
-                cropClockEndMs,
-            );
+        function currentMonitoringTimestampMs() {
+            return sim.virtualInstantMs;
         }
 
         function renderCropPlanAt(timestampMs) {
-            cropClockLastTimestampMs = timestampMs;
-            const referenceDate = new Date(timestampMs).toISOString().slice(0, 10);
+            const referenceDate = getLocalCalendarDate(new Date(timestampMs));
             let plantLayout;
             try {
                 plantLayout = getCropLayoutSettings();
@@ -4047,7 +4034,7 @@
                     overallProgress: getOverallPhenologyProgress(assignment.crop, stage)
                 };
             });
-            cropClockLastRenderDate = referenceDate;
+            cropPlanLastRenderDate = referenceDate;
 
             planned.forEach((assignment) => {
                 const key = `${assignment.bed}:${assignment.crop.slug}`;
@@ -4080,64 +4067,27 @@
                 plantLayout: assignment.plantLayout
             })));
             renderCropDistribution(planned);
-            const growthMode = cropClockSpeedMultiplier === 1
-                ? 'sincronizado con el escenario'
-                : `crecimiento acelerado x${cropClockSpeedMultiplier}`;
-            cropClockDate.textContent = `Fecha virtual: ${referenceDate} · día ${Math.max(
+            const simulatedDay = Math.max(
                 0,
-                Math.floor((timestampMs - cropClockStartMs) / 86400000)
-            )} · ${growthMode}`;
+                Math.floor((timestampMs - sim.virtualStartInstantMs) / 86400000)
+            );
+            cropMonitorDate.textContent = `Siguiendo Monitoreo · ${referenceDate} · día simulado ${simulatedDay}`;
             return true;
         }
 
-        function updateCropClock() {
-            if (!activeCropPlan.length) return;
-            const timestampMs = currentCropClockMs();
-            const referenceDate = new Date(timestampMs).toISOString().slice(0, 10);
-            if (referenceDate !== cropClockLastRenderDate || timestampMs >= cropClockEndMs) {
-                if (!renderCropPlanAt(timestampMs)) {
-                    if (cropClockInterval !== null) {
-                        clearInterval(cropClockInterval);
-                        cropClockInterval = null;
-                    }
-                    cropClockBaseMs = timestampMs;
-                    cropClockRunning = false;
-                    cropClockToggle.textContent = 'Reanudar reloj';
-                    return;
-                }
+        function updateCropPlanFromMonitoringClock() {
+            if (!activeCropPlan.length || simModeSelect.value !== 'sim') return;
+            const timestampMs = sim.virtualInstantMs;
+            const referenceDate = getLocalCalendarDate(new Date(timestampMs));
+            if (referenceDate === cropPlanLastRenderDate) return;
+            if (!renderCropPlanAt(timestampMs)) {
+                setCropPlanMessage('No se pudo actualizar la visualización fenológica.', true);
             }
-            if (timestampMs >= cropClockEndMs) {
-                cropClockBaseMs = cropClockEndMs;
-                cropClockComplete = true;
-                if (cropClockInterval !== null) {
-                    clearInterval(cropClockInterval);
-                    cropClockInterval = null;
-                }
-                cropClockRunning = false;
-                cropClockToggle.textContent = 'Simulación completa';
-                setCropClockEnabled(true);
-            }
-        }
-
-        function startCropClock() {
-            if (!activeCropPlan.length || cropClockComplete) return;
-            cropClockStartedAtMs = Date.now();
-            cropClockScenarioStartMinutes = sim.minutesOfDay;
-            cropClockScenarioStartRealMs = cropClockStartedAtMs;
-            cropClockScenarioMinutesPerSecond = backendDevices.usarHoraReal === false
-                ? Math.max(0.001, Number(backendDevices.timeScale) || 1)
-                : 1 / 60;
-            cropClockRunning = true;
-            cropClockToggle.textContent = 'Pausar reloj';
-            setCropClockEnabled(true);
-            updateCropClock();
-            if (!cropClockRunning || cropClockComplete) return;
-            cropClockInterval = setInterval(updateCropClock, 250);
         }
 
         function invalidateCropPlan(message) {
             cropPlanGenerate.disabled = false;
-            stopCropClock();
+            clearActiveCropPlan();
             greenhouseModel.userData.setCropPlan([]);
             renderCropDistribution([]);
             setCropPlanMessage(message);
@@ -4146,6 +4096,10 @@
         function generateCropPlan() {
             if (!cropCatalogCache) {
                 setCropPlanMessage('Espera a que se cargue el catálogo de cultivos.', true);
+                return;
+            }
+            if (simModeSelect.value !== 'sim') {
+                setCropPlanMessage('Cambia el selector “Clima” del panel Monitoreo a “Simulación local” para que el crecimiento siga el reloj x1/x10/x60/x360.', true);
                 return;
             }
             if (selectedCropSlugs.length === 0) {
@@ -4168,38 +4122,22 @@
 
             try {
                 getCropLayoutSettings();
-                stopCropClock();
+                clearActiveCropPlan();
                 activeCropPlan = assignments.map((assignment) => ({
                     ...assignment,
                     plantDate: selectedInputs.get(assignment.crop.slug)
                 }));
-                const firstPlantingMs = Math.min(
-                    ...activeCropPlan.map(({ plantDate }) => Date.parse(`${plantDate}T00:00:00Z`))
-                );
-                cropClockEndMs = Math.max(...activeCropPlan.map(({ crop, plantDate }) => {
-                    const durationDays = crop.phenology.reduce(
-                        (total, stage) => total + Number(stage.durationDays || 0),
-                        0
-                    );
-                    return Date.parse(`${plantDate}T00:00:00Z`) + durationDays * 86400000;
-                }));
-                cropClockBaseMs = firstPlantingMs;
-                cropClockStartMs = firstPlantingMs;
-                cropClockSpeedMultiplier = Number(cropClockSpeed.value);
-                cropClockComplete = false;
-                cropClockLastRenderDate = '';
-                setCropClockEnabled(true);
-                if (!renderCropPlanAt(cropClockBaseMs)) {
+                cropPlanLastRenderDate = '';
+                if (!renderCropPlanAt(sim.virtualInstantMs)) {
                     throw new Error('No se pudo dibujar la distribución de cultivos.');
                 }
                 moveCameraToCropPlan(activeCropPlan);
                 setCropPlanMessage(
-                    `Reloj fenológico sincronizado con el escenario. Crecimiento x${cropClockSpeedMultiplier}; datos preliminares.`
+                    'Distribución aplicada. El crecimiento avanza con la fecha y velocidad del panel Monitoreo; fases preliminares.'
                 );
-                startCropClock();
             } catch (error) {
                 console.error('[crop planning] No se pudo generar la distribución', error);
-                invalidateCropPlan('No se pudo iniciar el reloj fenológico.');
+                invalidateCropPlan('No se pudo generar la visualización de cultivos.');
                 setCropPlanMessage(error.message || 'No se pudo calcular la sugerencia.', true);
             }
         }
@@ -4230,60 +4168,12 @@
                     return;
                 }
 
-                const currentMs = currentCropClockMs();
+                const currentMs = currentMonitoringTimestampMs();
                 if (!renderCropPlanAt(currentMs)) {
-                    if (cropClockInterval !== null) {
-                        clearInterval(cropClockInterval);
-                        cropClockInterval = null;
-                    }
-                    cropClockBaseMs = currentMs;
-                    cropClockRunning = false;
-                    cropClockToggle.textContent = 'Reanudar reloj';
                     return;
                 }
                 setCropPlanMessage('Distribución estimada recalculada; las medidas siguen siendo ilustrativas y configurables.');
             });
-        });
-        cropClockToggle.addEventListener('click', () => {
-            if (cropClockRunning) {
-                cropClockBaseMs = currentCropClockMs();
-                if (cropClockInterval !== null) {
-                    clearInterval(cropClockInterval);
-                    cropClockInterval = null;
-                }
-                cropClockRunning = false;
-                renderCropPlanAt(cropClockBaseMs);
-                cropClockToggle.textContent = 'Reanudar reloj';
-            } else {
-                startCropClock();
-            }
-        });
-        cropClockSpeed.addEventListener('change', () => {
-            const currentMs = currentCropClockMs();
-            cropClockBaseMs = currentMs;
-            cropClockStartedAtMs = Date.now();
-            cropClockScenarioStartMinutes = sim.minutesOfDay;
-            cropClockScenarioStartRealMs = cropClockStartedAtMs;
-            cropClockScenarioMinutesPerSecond = backendDevices.usarHoraReal === false
-                ? Math.max(0.001, Number(backendDevices.timeScale) || 1)
-                : 1 / 60;
-            cropClockSpeedMultiplier = Number(cropClockSpeed.value);
-            renderCropPlanAt(currentMs);
-            updateCropClock();
-        });
-        cropClockReset.addEventListener('click', () => {
-            if (!activeCropPlan.length) return;
-            if (cropClockInterval !== null) {
-                clearInterval(cropClockInterval);
-                cropClockInterval = null;
-            }
-            cropClockRunning = false;
-            cropClockComplete = false;
-            cropClockBaseMs = cropClockStartMs;
-            cropClockLastRenderDate = '';
-            clearCropStageEvents();
-            renderCropPlanAt(cropClockBaseMs);
-            startCropClock();
         });
         document.getElementById('cropPlanClear').addEventListener('click', () => {
             invalidateCropPlan('Visualización y reloj limpiados. Las selecciones y fechas no se guardan.');
@@ -4376,10 +4266,7 @@
         `;
         simControls.appendChild(simScenarioSelect);
 
-        const simClockText = document.createElement('span');
-        simClockText.style.marginLeft = '6px';
-        simClockText.textContent = 'Hora: --:--';
-        simControls.appendChild(simClockText);
+        const simClockText = document.getElementById('mainVirtualClockDate');
 
         const simEventText = document.createElement('span');
         simEventText.style.marginLeft = '8px';
@@ -4439,10 +4326,16 @@
             }
         };
 
+        const simulationCalendarStartMs = Date.now();
+        const simulationCalendarStart = new Date(simulationCalendarStartMs);
+        const simulationCalendarDayStart = new Date(simulationCalendarStartMs);
+        simulationCalendarDayStart.setHours(0, 0, 0, 0);
         let sim = {
             enabled: false,
-            minutesOfDay: 18 * 60 + 45,
-            lastRealMs: Date.now(),
+            minutesOfDay: simulationCalendarStart.getHours() * 60 + simulationCalendarStart.getMinutes(),
+            virtualInstantMs: simulationCalendarStartMs,
+            virtualStartInstantMs: simulationCalendarDayStart.getTime(),
+            lastRealMs: simulationCalendarStartMs,
             temp_c: 27,
             hum_pct: 68,
             soil_pct: 58,
@@ -4474,6 +4367,18 @@
             const hh = String(Math.floor(m / 60)).padStart(2, '0');
             const mm = String(m % 60).padStart(2, '0');
             return `${hh}:${mm}`;
+        }
+
+        function setSimulationTimeOfDay(totalMinutes) {
+            sim.minutesOfDay = totalMinutes;
+            const date = new Date(sim.virtualInstantMs);
+            date.setHours(
+                Math.floor(totalMinutes / 60) % 24,
+                totalMinutes % 60,
+                0,
+                0
+            );
+            sim.virtualInstantMs = date.getTime();
         }
 
         function getScenarioProfile() {
@@ -4609,12 +4514,7 @@
             }
             const profile = climateScenarios[scenario];
             simSpeedSelect.value = String(speed);
-            sim.minutesOfDay = 13 * 60;
-            if (activeCropPlan.length && cropClockRunning) {
-                cropClockBaseMs = cropClockLastTimestampMs || cropClockBaseMs;
-                cropClockScenarioStartMinutes = sim.minutesOfDay;
-                cropClockScenarioStartRealMs = Date.now();
-            }
+            setSimulationTimeOfDay(13 * 60);
             sim.aire = false;
             sim.riego = false;
             sim.modoAutomatico = testMode === 'automatic';
@@ -4626,7 +4526,7 @@
             if (scenario === 'FRIO') sim.temp_c = 17;
             if (scenario === 'FRIO_INTENSO2') sim.temp_c = 15;
             if (scenario === 'DIA_NUBLADO') {
-                sim.minutesOfDay = 13 * 60;
+                setSimulationTimeOfDay(13 * 60);
                 sim.lux = 0;
             }
             testRun = {
@@ -4742,6 +4642,11 @@
             const previousAire = sim.aire;
             const previousRiego = sim.riego;
             sim.minutesOfDay += (dtSeconds * 60) * speedFactor;
+            sim.virtualInstantMs = advanceScenarioCalendar(
+                sim.virtualInstantMs,
+                dtSeconds,
+                speedFactor
+            );
 
             const f = solarFactor(sim.minutesOfDay);
             const profile = getScenarioProfile();
@@ -4885,7 +4790,6 @@
             }
 
             simSpeedValue.textContent = `Velocidad: x${speedFactor}`;
-            simClockText.textContent = `Hora: ${minutesToHHMM(sim.minutesOfDay)}`;
         }
 
         simScenarioSelect.addEventListener('change', () => {
@@ -4907,7 +4811,7 @@
             sim.modoCalor = backendDevices.modoCalor;
             sim.modoSeco = backendDevices.modoSeco;
             const [hours, minutes] = (backendDevices.horaVirtual || '18:45').split(':').map(Number);
-            sim.minutesOfDay = (hours * 60) + minutes;
+            setSimulationTimeOfDay((hours * 60) + minutes);
         }
 
         const sensorMetadata = {
@@ -5098,20 +5002,10 @@
                 const data = await response.json();
                 if (data?.devices) {
                     backendConnected = true;
-                    const nextScenarioUsesRealTime = data.devices.usarHoraReal !== false;
                     const nextScenarioTimeScale = typeof data.devices.timeScale === 'number'
                         && data.devices.timeScale > 0
                         ? data.devices.timeScale
                         : 1;
-                    const nextScenarioRate = nextScenarioUsesRealTime
-                        ? 1 / 60
-                        : Math.max(0.001, nextScenarioTimeScale);
-                    const previousCropTimestamp = activeCropPlan.length
-                        && cropClockRunning
-                        && simModeSelect.value === 'backend'
-                        ? currentCropClockMs()
-                        : null;
-                    const scenarioRateChanged = nextScenarioRate !== cropClockScenarioMinutesPerSecond;
                     backendDevices = {
                         luz: !!data.devices.luz,
                         aire: !!data.devices.aire,
@@ -5133,11 +5027,6 @@
                         timeScale: nextScenarioTimeScale,
                         fuenteDatos: data.devices.fuenteDatos || 'simulation'
                     };
-                    if (previousCropTimestamp !== null && scenarioRateChanged) {
-                        cropClockBaseMs = previousCropTimestamp;
-                        cropClockScenarioStartRealMs = Date.now();
-                        cropClockScenarioMinutesPerSecond = nextScenarioRate;
-                    }
                     console.log("[HTML] backendDevices updated:", backendDevices, "raw:", data);
                     if (debugHud) renderHud();
                     // Sincronizar el selector local con el timeScale que viene del backend
@@ -5205,20 +5094,16 @@
         // Inicial y al cambiar el modo
         startCronPingerIfBackend();
         simModeSelect.addEventListener('change', () => {
-            const currentCropTimestamp = activeCropPlan.length && cropClockRunning
-                ? cropClockLastTimestampMs || cropClockBaseMs
-                : null;
             if (simModeSelect.value === 'sim') {
                 syncLocalSimulationFromBackend();
                 captureLocalHistory(true);
-            }
-            if (currentCropTimestamp !== null) {
-                cropClockBaseMs = currentCropTimestamp;
-                cropClockScenarioStartMinutes = sim.minutesOfDay;
-                cropClockScenarioStartRealMs = Date.now();
-                cropClockScenarioMinutesPerSecond = backendDevices.usarHoraReal === false
-                    ? Math.max(0.001, Number(backendDevices.timeScale) || 1)
-                    : 1 / 60;
+                if (activeCropPlan.length) {
+                    cropPlanLastRenderDate = '';
+                    renderCropPlanAt(sim.virtualInstantMs);
+                    cropMonitorDate.textContent = 'Fenología reanudada con la fecha del reloj local de Monitoreo.';
+                }
+            } else if (activeCropPlan.length) {
+                cropMonitorDate.textContent = 'Fenología en pausa: cambia Monitoreo a Simulación local para avanzar las etapas con x1/x10/x60/x360.';
             }
             startCronPingerIfBackend();
             renderSensorCards();
@@ -5279,6 +5164,7 @@
 
             if (isSimLocal) {
                 updateLocalClimate(dtClimate);
+                updateCropPlanFromMonitoringClock();
                 // inyectamos al render como si vinieran del backend
                 backendDevices.temperatura_c = sim.temp_c;
                 backendDevices.humedad_pct = sim.hum_pct;
@@ -5305,12 +5191,18 @@
             // (siempre mostramos lo que viene del backend)
             if (simClockText) {
                 if (simModeSelect.value === 'sim') {
-                    simClockText.textContent = `Hora: ${minutesToHHMM(sim.minutesOfDay)}`;
+                    const simulatedDate = getLocalCalendarDate(new Date(sim.virtualInstantMs));
+                    const simulatedDay = Math.max(
+                        0,
+                        Math.floor((sim.virtualInstantMs - sim.virtualStartInstantMs) / 86400000)
+                    );
+                    simClockText.textContent = `Fecha: ${simulatedDate} · Día ${simulatedDay} · Hora: ${minutesToHHMM(sim.minutesOfDay)} · x${simSpeedSelect.value}`;
                 } else {
                     const now = new Date();
+                    const currentDate = getLocalCalendarDate(now);
                     const hh = String(now.getHours()).padStart(2, '0');
                     const mm = String(now.getMinutes()).padStart(2, '0');
-                    simClockText.textContent = `Hora: ${hh}:${mm}`;
+                    simClockText.textContent = `Fecha: ${currentDate} · Hora: ${hh}:${mm} · tiempo real`;
                 }
             }
 

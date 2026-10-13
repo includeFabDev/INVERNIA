@@ -3,6 +3,15 @@ const ZONES = ['A', 'B', 'C'];
 const MILLISECONDS_PER_DAY = 86400000;
 const MAX_VISUALIZED_PLANTS_PER_BED = 500;
 
+export function advanceScenarioCalendar(instantMs, elapsedSeconds, clockSpeed) {
+  if (![instantMs, elapsedSeconds, clockSpeed].every(Number.isFinite)
+    || elapsedSeconds < 0
+    || clockSpeed <= 0) {
+    throw new TypeError('Valid scenario calendar values are required');
+  }
+  return instantMs + elapsedSeconds * 60 * clockSpeed * 60000;
+}
+
 export function getAcceleratedTimestamp(baseMs, elapsedRealMs, daysPerSecond, endMs) {
   if (![baseMs, elapsedRealMs, daysPerSecond, endMs].every(Number.isFinite)
     || elapsedRealMs < 0

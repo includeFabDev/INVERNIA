@@ -515,13 +515,14 @@ function createCropVisualEntry(THREE, cropRoot, assignment, bedCenters, plantCou
 
 function updateCropVisualEntry(THREE, entry, assignment) {
   const progress = Math.max(0, Math.min(1, Number(assignment.overallProgress) || 0));
+  const visualGrowth = Math.sqrt(progress);
   const positions = assignment.plantLayout.positions;
   const isPlanted = String(assignment.stageName || '').toLowerCase() !== 'pre-siembra';
   const isFlowering = assignment.visualStage === 'flowering';
   const isFruiting = assignment.visualStage === 'fruiting';
   const height = entry.category === 'leaf'
-    ? 0.34 + progress * 0.5
-    : 0.48 + progress * 0.92;
+    ? 0.08 + visualGrowth * 0.72
+    : 0.12 + visualGrowth * 1.12;
   const horizontalScale = Math.min(
     1,
     assignment.plantLayout.plantSpacing / 1.4,
@@ -543,14 +544,16 @@ function updateCropVisualEntry(THREE, entry, assignment) {
     entry.stemMesh.setMatrixAt(plant, transform.matrix);
 
     const leavesPerPlant = entry.category === 'leaf'
-      ? Math.max(3, Math.round(3 + progress * 4))
-      : Math.max(3, Math.round(3 + progress * 3));
+      ? Math.max(1, Math.round(1 + visualGrowth * 6))
+      : Math.max(1, Math.round(1 + visualGrowth * 5));
     for (let leaf = 0; leaf < leavesPerPlant; leaf += 1) {
       const angle = (leaf / leavesPerPlant) * Math.PI * 2 + (plant % 3) * 0.45;
       const level = entry.category === 'leaf'
         ? 0.19 + (leaf % 4) * height * 0.17
         : height * (0.42 + (leaf % 3) * 0.16);
-      const radius = entry.category === 'leaf' ? 0.2 + progress * 0.18 : 0.18 + progress * 0.1;
+      const radius = entry.category === 'leaf'
+        ? 0.12 + visualGrowth * 0.24
+        : 0.1 + visualGrowth * 0.16;
       transform.position.set(
         x + Math.cos(angle) * radius * horizontalScale,
         GREENHOUSE.bedHeight + level,
@@ -558,9 +561,9 @@ function updateCropVisualEntry(THREE, entry, assignment) {
       );
       transform.rotation.set(0, -angle, entry.category === 'leaf' ? -0.16 : -0.32);
       transform.scale.set(
-        (entry.category === 'leaf' ? 0.31 + progress * 0.16 : 0.27 + progress * 0.08) * horizontalScale,
-        0.065 + progress * 0.02,
-        (entry.category === 'leaf' ? 0.2 + progress * 0.1 : 0.16) * horizontalScale
+      (entry.category === 'leaf' ? 0.14 + visualGrowth * 0.34 : 0.12 + visualGrowth * 0.24) * horizontalScale,
+      0.025 + visualGrowth * 0.06,
+      (entry.category === 'leaf' ? 0.08 + visualGrowth * 0.24 : 0.07 + visualGrowth * 0.16) * horizontalScale
       );
       transform.updateMatrix();
       entry.leafMesh.setMatrixAt(leafIndex++, transform.matrix);
@@ -574,7 +577,7 @@ function updateCropVisualEntry(THREE, entry, assignment) {
           z + (plant % 2 ? 0.12 : -0.12) * horizontalScale
         );
         transform.rotation.set(0, 0, 0);
-        transform.scale.setScalar((0.12 + progress * 0.04) * horizontalScale);
+        transform.scale.setScalar((0.08 + visualGrowth * 0.09) * horizontalScale);
         transform.updateMatrix();
         entry.fruitMesh.setMatrixAt(fruitIndex++, transform.matrix);
       }
