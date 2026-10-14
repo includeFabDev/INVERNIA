@@ -3261,12 +3261,8 @@
         }
 
         function advanceGuidedTourAuto() {
-            if (tourStepIndex >= tourSteps.length - 1) {
-                stopGuidedTourAuto();
-                return;
-            }
-            showTourStep(tourStepIndex + 1);
-            if (tourStepIndex === tourSteps.length - 1) stopGuidedTourAuto();
+            const nextStepIndex = (tourStepIndex + 1) % tourSteps.length;
+            showTourStep(nextStepIndex);
         }
 
         function scheduleGuidedTourAuto() {
@@ -3337,8 +3333,7 @@
         });
         document.querySelector('[data-tour-action="next"]').addEventListener('click', () => {
             showTourStep(tourStepIndex + 1);
-            if (tourStepIndex === tourSteps.length - 1) stopGuidedTourAuto();
-            else if (tourAutoTimer !== null) scheduleGuidedTourAuto();
+            if (tourAutoTimer !== null) scheduleGuidedTourAuto();
         });
         document.querySelector('[data-tour-action="auto"]').addEventListener('click', () => {
             if (tourAutoTimer === null) startGuidedTourAuto();
