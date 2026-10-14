@@ -233,6 +233,7 @@
         .tour-controls button:hover,
         .component-actions button:hover { border-color: rgba(100, 220, 170, 0.55); }
         .tour-controls [data-tour-action="next"],
+        .tour-controls [data-tour-action="auto"][aria-pressed="true"],
         .component-actions [data-component-action="focus"] {
             background: rgba(46,204,113,0.14);
             border-color: rgba(46,204,113,0.42);
@@ -1285,7 +1286,6 @@
     </header>
 
     <div class="quick-actions" aria-label="Controles rápidos del gemelo digital">
-        <button class="quick-action" type="button" data-action="explore">Explorar</button>
         <button class="quick-action" type="button" data-action="tour">Recorrido guiado</button>
         <button class="quick-action" type="button" data-action="walk">Caminar</button>
         <button class="quick-action" type="button" id="cropCatalogOpen" data-action="crops" aria-haspopup="dialog" aria-controls="cropDialog">Cultivos</button>
@@ -1373,6 +1373,7 @@
         <div class="tour-controls" id="tourControls" hidden>
             <button type="button" data-tour-action="previous">Anterior</button>
             <button type="button" data-tour-action="next">Siguiente</button>
+            <button type="button" data-tour-action="auto" aria-pressed="false">Iniciar auto</button>
             <button type="button" data-tour-action="exit">Salir</button>
         </div>
     </aside>
@@ -3097,6 +3098,7 @@
         const componentAssociatedButton = document.querySelector('[data-component-action="associated"]');
         let selectedEducationalComponent = null;
         let tourStepIndex = -1;
+        let tourAutoTimer = null;
         const tourSteps = [
             { componentId: 'overview', label: 'INVERNADERO HORTÍCOLA — 300 m²' },
             { componentId: 'structure', label: 'ESTRUCTURA GALVANIZADA' },
@@ -3245,7 +3247,39 @@
         function toggleExplorerPanel(forceOpen) {
             const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : explorerPanel.classList.contains('hidden');
             explorerPanel.classList.toggle('hidden', !shouldOpen);
-            setQuickActionState(shouldOpen ? 'explore' : null);
+            if (!shouldOpen) stopGuidedTourAuto();
+        }
+
+        function stopGuidedTourAuto() {
+            if (tourAutoTimer !== null) {
+                clearInterval(tourAutoTimer);
+                tourAutoTimer = null;
+            }
+            const autoButton = document.querySelector('[data-tour-action="auto"]');
+            autoButton.textContent = 'Iniciar auto';
+            autoButton.setAttribute('aria-pressed', 'false');
+        }
+
+        function advanceGuidedTourAuto() {
+            if (tourStepIndex >= tourSteps.length - 1) {
+                stopGuidedTourAuto();
+                return;
+            }
+            showTourStep(tourStepIndex + 1);
+            if (tourStepIndex === tourSteps.length - 1) stopGuidedTourAuto();
+        }
+
+        function scheduleGuidedTourAuto() {
+            if (tourAutoTimer !== null) clearInterval(tourAutoTimer);
+            tourAutoTimer = setInterval(advanceGuidedTourAuto, 5000);
+        }
+
+        function startGuidedTourAuto() {
+            if (tourStepIndex === tourSteps.length - 1) showTourStep(0);
+            const autoButton = document.querySelector('[data-tour-action="auto"]');
+            autoButton.textContent = 'Detener auto';
+            autoButton.setAttribute('aria-pressed', 'true');
+            scheduleGuidedTourAuto();
         }
 
         function showTourStep(index) {
@@ -3261,6 +3295,7 @@
         }
 
         function exitGuidedTour(returnToGeneral = true) {
+            stopGuidedTourAuto();
             tourStepIndex = -1;
             tourStatus.hidden = true;
             document.getElementById('tourControls').hidden = true;
@@ -3273,6 +3308,7 @@
         }
 
         function runGuidedTour() {
+            stopGuidedTourAuto();
             toggleExplorerPanel(true);
             showTourStep(0);
         }
@@ -3295,8 +3331,19 @@
             renderComponentCard(selectedEducationalComponent);
             componentDescription.textContent = `${selectedEducationalComponent.description} Sensores asociados resaltados: ${associatedRoots.map((root) => root.userData.iotDevice.name).join(', ')}.`;
         });
-        document.querySelector('[data-tour-action="previous"]').addEventListener('click', () => showTourStep(tourStepIndex - 1));
-        document.querySelector('[data-tour-action="next"]').addEventListener('click', () => showTourStep(tourStepIndex + 1));
+        document.querySelector('[data-tour-action="previous"]').addEventListener('click', () => {
+            showTourStep(tourStepIndex - 1);
+            if (tourAutoTimer !== null) scheduleGuidedTourAuto();
+        });
+        document.querySelector('[data-tour-action="next"]').addEventListener('click', () => {
+            showTourStep(tourStepIndex + 1);
+            if (tourStepIndex === tourSteps.length - 1) stopGuidedTourAuto();
+            else if (tourAutoTimer !== null) scheduleGuidedTourAuto();
+        });
+        document.querySelector('[data-tour-action="auto"]').addEventListener('click', () => {
+            if (tourAutoTimer === null) startGuidedTourAuto();
+            else stopGuidedTourAuto();
+        });
         document.querySelector('[data-tour-action="exit"]').addEventListener('click', () => exitGuidedTour(true));
 
         navBtns.forEach(btn => {
@@ -3726,10 +3773,6 @@
                 }
                 if (action === 'tour') {
                     runGuidedTour();
-                    return;
-                }
-                if (action === 'explore') {
-                    toggleExplorerPanel();
                     return;
                 }
             });
